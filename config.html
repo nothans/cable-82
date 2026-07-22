@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CABLE 82 - Control Room</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+  /* CABLE 82 control room - an Operate surface.
+     Identity: tinted charcoal ground (never pure black), the VGA bitmap face
+     for the masthead and section headers only, a clean system sans for every
+     control, broadcast blue as the one accent (primary action / focus /
+     selection), hard edges, no glow, no gradients, single-level panels. */
+
+  @font-face {
+    font-family: "VGA";
+    src: url("fonts/webplus-ibm-vga-8x16.woff") format("woff");
+    font-display: swap;
+  }
+
+  :root {
+    --ground: #16181f;
+    --panel: #1d2029;
+    --panel-2: #232733;
+    --line: #2f3444;
+    --line-strong: #3c4356;
+    --ink: #e7e9f0;
+    --ink-dim: #9aa2b4;
+    --accent: #4b64e6;
+    --accent-ink: #f4f6ff;
+    --danger: #d0483e;
+    --ok: #3fae67;
+    --warn: #d6a52a;
+    --radius: 10px;
+    --sp-1: 8px;
+    --sp-2: 16px;
+    --sp-3: 24px;
+    --sp-4: 32px;
+    --sp-5: 48px;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--accent); }
+
+  /* ---- masthead ---- */
+
+  header.masthead {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: baseline; gap: var(--sp-2); min-width: 0; }
+  .bug {
+    font-family: "VGA", monospace;
+    font-size: 22px;
+    letter-spacing: 1px;
+    background: var(--ink);
+    color: var(--panel);
+    padding: 4px 10px 2px;
+    text-transform: uppercase;
+  }
+  .brand .sub {
+    font-family: "VGA", monospace;
+    font-size: 13px;
+    letter-spacing: 1px;
+    color: var(--ink-dim);
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .masthead .actions { display: flex; align-items: center; gap: var(--sp-1); }
+
+  main {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: var(--sp-4) var(--sp-3) 140px;
+  }
+
+  .lede {
+    color: var(--ink-dim);
+    margin: 0 0 var(--sp-4);
+    max-width: 68ch;
+  }
+
+  /* ---- panels ---- */
+
+  section.panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: var(--sp-3);
+    margin-bottom: var(--sp-3);
+  }
+  section.panel > h2 {
+    font-family: "VGA", monospace;
+    font-size: 16px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin: 0 0 var(--sp-1);
+    color: var(--ink);
+  }
+  section.panel > .hint {
+    color: var(--ink-dim);
+    font-size: 13.5px;
+    margin: 0 0 var(--sp-3);
+  }
+
+  /* ---- form grid ---- */
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-2) var(--sp-3);
+  }
+  .grid.one { grid-template-columns: minmax(0, 1fr); }
+  @media (max-width: 560px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .field > label { font-size: 13px; color: var(--ink-dim); letter-spacing: 0.02em; }
+  .field .note { font-size: 12.5px; color: var(--ink-dim); }
+
+  input[type="text"], input[type="number"], input[type="url"], select, textarea {
+    font-family: var(--sans);
+    font-size: 15px;
+    color: var(--ink);
+    background: var(--ground);
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    padding: 9px 11px;
+    width: 100%;
+    transition: border-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  input.mono { font-family: var(--mono); font-size: 13.5px; }
+  input::placeholder, textarea::placeholder { color: #6b7183; }
+  input:hover, select:hover, textarea:hover { border-color: #4a5268; }
+  input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-color: var(--accent);
+  }
+  textarea {
+    min-height: 170px;
+    line-height: 1.5;
+    resize: vertical;
+  }
+  .count { font-size: 12.5px; color: var(--ink-dim); }
+
+  /* ---- toggles, sliders, track list ---- */
+  input[type="checkbox"], input[type="range"] { accent-color: var(--accent); }
+  input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+  input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .toggle { display: flex; align-items: center; gap: 10px; padding: 3px 0; }
+  .toggle label { color: var(--ink); font-size: 15px; cursor: pointer; }
+  .range-row { display: flex; align-items: center; gap: var(--sp-2); }
+  .range-row input[type="range"] { flex: 1; }
+  .range-row output { min-width: 46px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .track-list { display: flex; flex-direction: column; gap: 3px; font-size: 14px; color: var(--ink); }
+  .track-list .num { color: var(--ink-dim); font-variant-numeric: tabular-nums; margin-right: 8px; }
+
+  /* ---- weather location search ---- */
+  .wx-current { font-size: 15px; padding: 6px 0 10px; }
+  .wx-current .muted { color: var(--ink-dim); }
+  .wx-search { display: flex; gap: var(--sp-1); }
+  .wx-search input { flex: 1; }
+  .wx-results { display: flex; flex-direction: column; gap: 4px; margin-top: var(--sp-1); }
+  .wx-results:empty { display: none; }
+  .wx-result { justify-content: flex-start; text-align: left; font-weight: 500; }
+  select {
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%239aa2b4' stroke-width='1.5'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 11px center;
+    padding-right: 30px;
+  }
+
+  /* ---- buttons ---- */
+
+  button {
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+    background: var(--panel-2);
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: background 160ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 160ms;
+  }
+  button:hover { background: #2b3040; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
+  button:active { background: #313749; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  button.primary:hover { background: #5a72ec; }
+  button.primary:active { background: #4258d0; }
+
+  button.ghost { background: transparent; }
+  button.small { font-size: 13px; padding: 6px 10px; }
+  button.icon { padding: 6px 9px; line-height: 1; }
+  button.danger { color: #f0b6b0; border-color: #5a2b28; }
+  button.danger:hover { background: #3a1f1d; border-color: var(--danger); }
+
+  .row-actions { display: flex; gap: 6px; }
+  .add-row { margin-top: var(--sp-2); }
+
+  /* ---- repeating rows (feeds / rotation / messages) ---- */
+
+  .list { display: flex; flex-direction: column; gap: var(--sp-1); }
+  .item {
+    display: grid;
+    align-items: center;
+    gap: var(--sp-1);
+    padding: var(--sp-1);
+    background: var(--ground);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .item .grip {
+    font-family: var(--mono);
+    color: var(--ink-dim);
+    font-size: 12px;
+    text-align: center;
+    user-select: none;
+  }
+  .feed-item { grid-template-columns: 90px 110px minmax(0, 1fr) auto; }
+  .rot-item { grid-template-columns: 28px 150px minmax(0, 1fr) auto; }
+  .msg-item { grid-template-columns: minmax(0, 1fr) 130px auto; }
+  @media (max-width: 560px) {
+    .feed-item, .rot-item, .msg-item { grid-template-columns: minmax(0, 1fr); }
+    .item .row-actions { justify-content: flex-end; }
+  }
+
+  .empty {
+    color: var(--ink-dim);
+    font-size: 13.5px;
+    padding: var(--sp-2);
+    border: 1px dashed var(--line-strong);
+    border-radius: 8px;
+    text-align: center;
+  }
+
+  /* ---- chips ---- */
+
+  .chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    color: var(--ink-dim);
+    background: var(--ground);
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    padding: 6px 12px 6px 10px;
+    cursor: pointer;
+    transition: border-color 160ms, color 160ms;
+  }
+  .chip .sw { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.18); }
+  .chip:hover { border-color: #4a5268; }
+  .chip[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); }
+  .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---- save bar ---- */
+
+  .savebar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 6;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--panel);
+    border-top: 1px solid var(--line-strong);
+  }
+  .savebar .status { flex: 1; min-width: 0; font-size: 13.5px; color: var(--ink-dim); }
+  .savebar .status.ok { color: var(--ok); }
+  .savebar .status.err { color: #f0938a; }
+  .savebar .status.warn { color: var(--warn); }
+
+  .warnings {
+    list-style: none;
+    margin: var(--sp-1) 0 0;
+    padding: 0;
+    font-size: 12.5px;
+    color: var(--warn);
+  }
+  .warnings li::before { content: "! "; }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+  <header class="masthead">
+    <div class="brand">
+      <span class="bug">CABLE 82</span>
+      <span class="sub">Control Room</span>
+    </div>
+    <div class="actions">
+      <a id="preview" href="/" target="_blank" rel="noopener"><button type="button" class="ghost small">View channel &#8599;</button></a>
+    </div>
+  </header>
+
+  <main id="app" aria-busy="true">
+    <p class="lede">
+      This is the whole channel in one screen. Change what you like, hit Save, and the
+      broadcast picks it up within about twenty seconds - no need to touch the TV or the Pi.
+    </p>
+
+    <section class="panel">
+      <h2>Identity</h2>
+      <p class="hint">The name and tagline shown in the header, and the clock format.</p>
+      <div class="grid">
+        <div class="field">
+          <label for="f-channelName">Channel name</label>
+          <input type="text" id="f-channelName" maxlength="40" placeholder="CABLE 82">
+        </div>
+        <div class="field">
+          <label for="f-tagline">Tagline</label>
+          <input type="text" id="f-tagline" maxlength="60" placeholder="COMMUNITY BULLETIN BOARD">
+        </div>
+        <div class="field">
+          <label for="f-timeFormat">Clock format</label>
+          <select id="f-timeFormat">
+            <option value="12h">12-hour (8:04 PM)</option>
+            <option value="24h">24-hour (20:04)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-port">Server port</label>
+          <input type="number" id="f-port" min="1" max="65535" step="1">
+          <span class="note">Takes effect the next time the server restarts.</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Timing</h2>
+      <p class="hint">How fast pages turn, how often feeds refresh, and CRT housekeeping.</p>
+      <div class="grid">
+        <div class="field">
+          <label for="f-pageSeconds">Seconds per page</label>
+          <input type="number" id="f-pageSeconds" min="3" max="120" step="1">
+        </div>
+        <div class="field">
+          <label for="f-refreshMinutes">Feed refresh (minutes)</label>
+          <input type="number" id="f-refreshMinutes" min="1" max="1440" step="1">
+        </div>
+        <div class="field">
+          <label for="f-maxItemsPerFeed">Items kept per feed</label>
+          <input type="number" id="f-maxItemsPerFeed" min="1" max="100" step="1">
+        </div>
+        <div class="field">
+          <label for="f-overscanPercent">Overscan safe margin (%)</label>
+          <input type="number" id="f-overscanPercent" min="0" max="15" step="1">
+          <span class="note">Raise it if your TV crops the edges.</span>
+        </div>
+        <div class="field">
+          <label for="f-dailyReloadHour">Daily reload hour</label>
+          <select id="f-dailyReloadHour"></select>
+          <span class="note">A once-a-day refresh keeps a kiosk healthy.</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Feeds</h2>
+      <p class="hint">RSS or Atom sources. The <code>id</code> is how the rotation and crawl refer to a feed; the label is what viewers see. The server only ever fetches URLs listed here.</p>
+      <div id="feeds" class="list"></div>
+      <button type="button" id="addFeed" class="small add-row">+ Add feed</button>
+    </section>
+
+    <section class="panel">
+      <h2>Page rotation</h2>
+      <p class="hint">The lineup, in order. Each visit to a headlines slot shows the next item from that feed.</p>
+      <div id="rotation" class="list"></div>
+      <button type="button" id="addSlot" class="small add-row">+ Add page</button>
+    </section>
+
+    <section class="panel">
+      <h2>Community messages</h2>
+      <p class="hint">Your bulletin board: birthdays, bake sales, lost dogs. Leave the color on Auto to let them cycle.</p>
+      <div id="messages" class="list"></div>
+      <button type="button" id="addMessage" class="small add-row">+ Add message</button>
+    </section>
+
+    <section class="panel">
+      <h2>Facts &amp; jokes</h2>
+      <p class="hint">Two decks of one-liners, one per line. The rotation shows one at a time - Facts under a DID YOU KNOW card, dad jokes under a DAD JOKE card. Add either to the rotation above.</p>
+      <div class="grid">
+        <div class="field">
+          <label for="f-facts">Fun facts <span id="factsCount" class="count"></span></label>
+          <textarea id="f-facts" spellcheck="true" placeholder="Honey never spoils"></textarea>
+        </div>
+        <div class="field">
+          <label for="f-dadJokes">Dad jokes <span id="jokesCount" class="count"></span></label>
+          <textarea id="f-dadJokes" spellcheck="true" placeholder="Why did the scarecrow win an award? He was outstanding in his field."></textarea>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Weather</h2>
+      <p class="hint">One weather strip, fed by Open-Meteo (free, no account). Search your town, pick the match, choose units. Add a Weather page to the rotation above to put it on the air. The AM/PM vs 24-hour choice follows the Clock format up in Identity.</p>
+      <div class="field">
+        <label>Location</label>
+        <div id="wxCurrent" class="wx-current"></div>
+        <div class="wx-search">
+          <input type="text" id="wxSearch" placeholder="Search a town, e.g. Boston">
+          <button type="button" id="wxLookup" class="small">Look up</button>
+        </div>
+        <div id="wxResults" class="wx-results"></div>
+      </div>
+      <div class="grid" style="margin-top: var(--sp-2);">
+        <div class="field">
+          <label for="f-tempUnit">Temperature</label>
+          <select id="f-tempUnit">
+            <option value="F">Fahrenheit (&deg;F)</option>
+            <option value="C">Celsius (&deg;C)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-windUnit">Wind speed</label>
+          <select id="f-windUnit">
+            <option value="mph">Miles per hour (mph)</option>
+            <option value="kmh">Kilometers per hour (km/h)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-wxTimezone">Timezone</label>
+          <input type="text" id="f-wxTimezone" class="mono" placeholder="auto">
+          <span class="note">Auto-filled from the location; change only if needed.</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Music</h2>
+      <p class="hint">Continuous background music behind the channel, played from the <code>music/</code> folder - drop audio files there and they join the rotation. On a Pi kiosk, launch Chromium with <code>--autoplay-policy=no-user-gesture-required</code> so it plays from boot; on a desktop it starts on your first click.</p>
+      <div class="grid">
+        <div class="field">
+          <label>Playback</label>
+          <div class="toggle"><input type="checkbox" id="f-musicEnabled"><label for="f-musicEnabled">Play background music</label></div>
+          <div class="toggle"><input type="checkbox" id="f-musicShuffle"><label for="f-musicShuffle">Shuffle the tracks</label></div>
+        </div>
+        <div class="field">
+          <label for="f-musicVolume">Volume</label>
+          <div class="range-row">
+            <input type="range" id="f-musicVolume" min="0" max="100" step="1">
+            <output id="musicVolumeOut">60%</output>
+          </div>
+        </div>
+      </div>
+      <div class="field" style="margin-top: var(--sp-2);">
+        <label>Tracks in the folder <span id="trackCount" class="count"></span></label>
+        <div id="trackList" class="track-list"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>The crawl</h2>
+      <p class="hint">The ticker along the bottom, and the fixed label pinned to its left.</p>
+      <div class="grid">
+        <div class="field">
+          <label for="f-crawlFlag">Flag label</label>
+          <input type="text" id="f-crawlFlag" maxlength="16" placeholder="LATEST">
+          <span class="note">Leave blank to hide the flag.</span>
+        </div>
+        <div class="field">
+          <label for="f-crawlSeconds">Seconds to cross the screen</label>
+          <input type="number" id="f-crawlSeconds" min="2" max="60" step="1">
+        </div>
+        <div class="field">
+          <label for="f-crawlSeparator">Separator between items</label>
+          <input type="text" id="f-crawlSeparator" class="mono" maxlength="16">
+        </div>
+      </div>
+      <div class="field" style="margin-top: var(--sp-2);">
+        <label>Feeds that ride the ticker</label>
+        <div id="crawlFeeds" class="chips"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Colors</h2>
+      <p class="hint">Pages with no fixed color cycle through the palette you pick. The palette is broadcast-safe on purpose.</p>
+      <div class="field">
+        <label>Page cycle</label>
+        <div id="pageCycle" class="chips"></div>
+      </div>
+      <div class="grid" style="margin-top: var(--sp-2);">
+        <div class="field">
+          <label for="f-headerBg">Header background</label>
+          <select id="f-headerBg"></select>
+        </div>
+        <div class="field">
+          <label for="f-crawlBg">Crawl background</label>
+          <select id="f-crawlBg"></select>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="savebar">
+    <div class="status" id="status">Loading current channel&#8230;</div>
+    <button type="button" id="revert" class="ghost small">Revert</button>
+    <button type="button" id="save" class="primary" disabled>Save changes</button>
+  </div>
+
+  <script src="config-schema.js"></script>
+  <script src="config-page.js"></script>
+</body>
+</html>
