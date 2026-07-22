@@ -1,0 +1,232 @@
+/* cable-82 — 1982 cable character-generator look.
+   Identity: bundled IBM VGA bitmap face, broadcast-safe saturated primaries,
+   solid color bands, hard cuts, all caps. The one shadow allowed is the hard
+   offset drop shadow real character generators used for legibility over color
+   (solid, no blur) — never a soft neon glow. No gradients, no fake scanlines:
+   the CRT is the filter. */
+
+@font-face {
+  font-family: "VGA";
+  src: url("fonts/webplus-ibm-vga-8x16.woff") format("woff");
+  font-display: block;
+}
+
+:root {
+  --c-blue: #2038C8;
+  --c-cyan: #20A8B8;
+  --c-green: #18A038;
+  --c-yellow: #C8A020;
+  --c-red: #C03028;
+  --c-magenta: #B03898;
+  --c-white: #F0F0EC;
+  --c-ink: #101018;
+  --letterbox: #0A0A12;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body { height: 100%; background: var(--letterbox); }
+
+#letterbox {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The stage is a virtual 640x480 screen. Everything is sized in --u
+   (1 virtual pixel), so the composition scales to any real screen. */
+#stage {
+  width: min(100vw, calc(100vh * 4 / 3));
+  aspect-ratio: 4 / 3;
+  container-type: size;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--c-ink);
+  font-family: "VGA", monospace;
+  text-transform: uppercase;
+  color: var(--c-white);
+  --u: calc(100cqw / 640);
+  /* Overscan safe margins. --ovp is set from config (percent, 0-15). */
+  --ovp: 7;
+  --ovx: calc(var(--u) * 640 * var(--ovp) / 100);
+  --ovy: calc(var(--u) * 480 * var(--ovp) / 100);
+  /* Hard offset drop shadow, the way character generators did it: solid,
+     no blur, down-and-right. --shadow can be overridden from config. */
+  --shadow: rgba(8, 8, 16, 0.7);
+  /* Broadcast divider rules and the station-bug / crawl-flag accent. */
+  --rule: var(--c-white);
+  --flag-bg: var(--c-red);
+  --flag-fg: var(--c-white);
+}
+
+/* Every glyph on the stage carries the hard CG drop shadow. */
+#stage :is(#ch-name, #ch-tagline, #ch-clock, #ch-date, #page-kicker,
+  #page-body, #page-time, #page-date, #crawl-flag, #crawl-track,
+  #wx-location, #wx-temp, #wx-cond, #wx-hilo, #wx-sun,
+  #error-title, #error-sub, #error-detail) {
+  text-shadow: calc(var(--u) * 2) calc(var(--u) * 2) 0 var(--shadow);
+}
+
+/* ---- Header band ---- */
+
+#band-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: calc(var(--u) * 16);
+  padding: var(--ovy) var(--ovx) calc(var(--u) * 10);
+  background: var(--header-bg, var(--c-blue));
+  border-bottom: calc(var(--u) * 3) solid var(--rule);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* The channel name is a station "bug": an inverted solid box, the way a
+   local channel stamped its logo in the corner. --bug-bg / --bug-fg are
+   set from the header colors so it inverts cleanly against the band. */
+#ch-name {
+  font-size: calc(var(--u) * 32);
+  display: inline-block;
+  padding: calc(var(--u) * 3) calc(var(--u) * 10) calc(var(--u) * 1);
+  background: var(--bug-bg, var(--c-white));
+  color: var(--bug-fg, var(--header-bg, var(--c-blue)));
+  letter-spacing: calc(var(--u) * 2);
+  text-shadow: none;
+}
+#ch-tagline { font-size: calc(var(--u) * 16); margin-top: calc(var(--u) * 8); }
+#header-right { text-align: right; }
+#ch-clock { font-size: calc(var(--u) * 32); }
+#ch-date { font-size: calc(var(--u) * 16); margin-top: calc(var(--u) * 6); }
+
+/* ---- Page area ---- */
+
+#page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: calc(var(--u) * 20);
+  padding: calc(var(--u) * 16) var(--ovx);
+  overflow: hidden;
+  background: var(--c-blue);
+}
+
+#page-kicker {
+  font-size: calc(var(--u) * 20);
+  line-height: 1;
+  padding: calc(var(--u) * 8) calc(var(--u) * 18) calc(var(--u) * 6);
+  background: var(--c-ink);
+  color: var(--c-white);
+  letter-spacing: calc(var(--u) * 2);
+  text-shadow: none;
+}
+#page-kicker:empty { display: none; }
+
+#page-body {
+  font-size: calc(var(--u) * 32);
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+#page-body.big { font-size: calc(var(--u) * 48); line-height: 1.25; -webkit-line-clamp: 4; line-clamp: 4; }
+
+#page-time { font-size: calc(var(--u) * 64); line-height: 1; }
+#page-date { font-size: calc(var(--u) * 32); line-height: 1.35; }
+
+/* Clock page shows time/date; every other page shows kicker/body. */
+#page-time, #page-date { display: none; }
+#page.mode-clock #page-time, #page.mode-clock #page-date { display: block; }
+#page.mode-clock #page-kicker, #page.mode-clock #page-body { display: none; }
+
+/* Weather page: a card of location / big temp / condition / hi-lo / sun.
+   The kicker stays (WEATHER); body, time, and date hide. */
+#page-weather { display: none; }
+#page.mode-weather #page-weather {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 10);
+}
+#page.mode-weather #page-body,
+#page.mode-weather #page-time,
+#page.mode-weather #page-date { display: none; }
+
+#wx-location { font-size: calc(var(--u) * 28); line-height: 1; }
+#wx-temp { font-size: calc(var(--u) * 92); line-height: 1; }
+#wx-cond { font-size: calc(var(--u) * 32); line-height: 1; }
+#wx-hilo { font-size: calc(var(--u) * 26); line-height: 1; }
+#wx-sun { font-size: calc(var(--u) * 18); line-height: 1; margin-top: calc(var(--u) * 4); }
+#wx-sun:empty { display: none; }
+
+/* ---- Crawl band ---- */
+
+#band-crawl {
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  background: var(--crawl-bg, var(--c-ink));
+  border-top: calc(var(--u) * 3) solid var(--rule);
+  padding-bottom: var(--ovy);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* Fixed category flag pinned at the left of the ticker — the cable-news
+   lower-third signature. Text scrolls past it in the window to its right. */
+#crawl-flag {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding: calc(var(--u) * 10) calc(var(--u) * 18);
+  background: var(--flag-bg);
+  color: var(--flag-fg);
+  font-size: calc(var(--u) * 26);
+  letter-spacing: calc(var(--u) * 2);
+  border-right: calc(var(--u) * 3) solid var(--rule);
+}
+#crawl-flag:empty { display: none; }
+
+#crawl-window {
+  position: relative;
+  flex: 1 1 auto;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  padding: calc(var(--u) * 10) 0;
+}
+
+#crawl-track {
+  display: inline-block;
+  font-size: calc(var(--u) * 32);
+  will-change: transform;
+}
+
+/* ---- Error card (broken config) ---- */
+
+#error-card {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: calc(var(--u) * 24);
+  padding: var(--ovy) var(--ovx);
+  background: var(--c-blue);
+  color: var(--c-white);
+}
+#error-card[hidden] { display: none; }
+#error-title { font-size: calc(var(--u) * 48); line-height: 1; }
+#error-sub { font-size: calc(var(--u) * 24); line-height: 1.4; }
+#error-detail { font-size: calc(var(--u) * 16); line-height: 1.5; }
