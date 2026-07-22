@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>cable-82 test harness</title>
+<style>
+  body { background: #101018; color: #F0F0EC; font-family: monospace; padding: 2rem; }
+  h1 { font-size: 1.2rem; }
+  ul { list-style: none; padding: 0; }
+  li { padding: 2px 0; }
+  li.pass::before { content: "PASS "; color: #18A038; }
+  li.fail::before { content: "FAIL "; color: #C03028; }
+  #summary { margin-top: 1rem; padding: 8px; }
+  #summary.ok { background: #18A038; }
+  #summary.bad { background: #C03028; }
+</style>
+</head>
+<body>
+<h1>cable-82 test harness (app.js pure functions)</h1>
+<ul id="results"></ul>
+<div id="summary"></div>
+<script src="../config-schema.js"></script>
+<script src="../app.js"></script>
+<script>
+(() => {
+  "use strict";
+  const C = window.Cable82;
+  const results = document.getElementById("results");
+  let pass = 0, fail = 0;
+
+  function t(name, fn) {
+    const li = document.createElement("li");
+    try {
+      fn();
+      li.className = "pass";
+      pass++;
+    } catch (e) {
+      li.className = "fail";
+      name += " :: " + e.message;
+      fail++;
+    }
+    li.textContent = name;
+    results.appendChild(li);
+  }
+  function eq(a, b) {
+    const sa = JSON.stringify(a), sb = JSON.stringify(b);
+    if (sa !== sb) throw new Error("expected " + sb + ", got " + sa);
+  }
+  function ok(v, msg) { if (!v) throw new Error(msg || "expected truthy"); }
+
+  const RSS = '<?xml version="1.0"?><rss version="2.0"><channel>' +
+    "<item><title>First story</title></item>" +
+    "<item><title>Second &amp; third</title></item>" +
+    "<item><title><![CDATA[Fourth story]]></title></item>" +
+    "</channel></rss>";
+  const ATOM = '<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">' +
+    "<entry><title>Atom one</title></entry><entry><title>Atom two</title></entry></feed>";
+
+  t("parseFeed reads RSS 2.0 titles", () => eq(C.parseFeed(RSS), ["First story", "Second & third", "Fourth story"]));
+  t("parseFeed reads Atom titles", () => eq(C.parseFeed(ATOM), ["Atom one", "Atom two"]));
+  t("parseFeed returns [] for malformed XML", () => eq(C.parseFeed("<rss><channel><item><title>Broken"), []));
+  t("parseFeed returns [] for empty input", () => { eq(C.parseFeed(""), []); eq(C.parseFeed(null), []); });
+
+  t("sanitize strips emoji", () => eq(C.sanitize("hello \u{1F600} world"), "hello world"));
+  t("sanitize maps typographic punctuation", () =>
+    eq(C.sanitize("it’s “fine” – really…"), "it's \"fine\" - really..."));
+  t("sanitize collapses whitespace", () => eq(C.sanitize("  a\n\n b\tc  "), "a b c"));
+  t("sanitize strips control characters", () =>
+    eq(C.sanitize("ab" + String.fromCharCode(7) + "c" + String.fromCharCode(27)), "abc"));
+  t("sanitize caps length at 160 with ellipsis", () => {
+    const out = C.sanitize("x".repeat(300));
+    ok(out.length === 160, "length is " + out.length);
+    ok(out.endsWith("..."), "ends with ellipsis");
+  });
+  t("sanitize keeps Latin-1 accents", () => eq(C.sanitize("Café olé"), "Café olé"));
+
+  t("makeRR cycles and survives size changes", () => {
+    const rr = C.makeRR();
+    eq([rr.next(3), rr.next(3), rr.next(3), rr.next(3)], [0, 1, 2, 0]);
+    eq(rr.next(2), 1);
+    eq(rr.next(0), -1);
+  });
+
+  t("buildCrawlText interleaves feeds with labels", () => {
+    const out = C.buildCrawlText({
+      feedIds: ["a", "b"],
+      labels: { a: "AAA", b: "BBB" },
+      items: { a: ["one", "two"], b: ["uno"] },
+      separator: " | ",
+      fallback: "FALLBACK",
+    });
+    eq(out, "AAA: one | BBB: uno | AAA: two");
+  });
+  t("buildCrawlText falls back when all feeds are empty", () => {
+    eq(C.buildCrawlText({ feedIds: ["a"], labels: {}, items: {}, separator: " | ", fallback: "FB" }), "FB");
+  });
+
+  t("resolveColor resolves palette names and hex", () => {
+    eq(C.resolveColor("green", "blue"), C.PALETTE.green);
+    eq(C.resolveColor("#ABC123", "blue"), "#ABC123");
+    eq(C.resolveColor("nonsense", "red"), C.PALETTE.red);
+  });
+  t("textColorFor pairs ink text with light backgrounds", () => {
+    eq(C.textColorFor("yellow"), C.PALETTE.ink);
+    eq(C.textColorFor("cyan"), C.PALETTE.ink);
+    eq(C.textColorFor("blue"), C.PALETTE.white);
+  });
+  t("textColorFor picks by luminance for raw hex", () => {
+    eq(C.textColorFor("#F0E8D0"), C.PALETTE.ink); // light bg, dark text
+    eq(C.textColorFor("#102040"), C.PALETTE.white); // dark bg, light text
+  });
+
+  t("clampNum clamps and falls back", () => {
+    eq(C.clampNum(50, 0, 15, 7), 15);
+    eq(C.clampNum(-3, 0, 15, 7), 0);
+    eq(C.clampNum("nope", 0, 15, 7), 7);
+    eq(C.clampNum(null, 0, 15, 7), 7);
+    eq(C.clampNum(true, 0, 15, 7), 7);
+    eq(C.clampNum("", 0, 15, 7), 7);
+  });
+
+  t("formatClock 12h and 24h", () => {
+    const d = new Date(2026, 6, 21, 20, 4);
+    eq(C.formatClock(d, "12h"), "8:04 PM");
+    eq(C.formatClock(d, "24h"), "20:04");
+    eq(C.formatClock(new Date(2026, 6, 21, 0, 30), "12h"), "12:30 AM");
+  });
+  t("formatHeaderDate and formatLongDate", () => {
+    const d = new Date(2026, 6, 21);
+    eq(C.formatHeaderDate(d), "TUE JUL 21");
+    eq(C.formatLongDate(d), "TUESDAY, JULY 21, 2026");
+  });
+
+  t("validateConfig rejects a missing config", () => {
+    ok(!C.validateConfig(undefined).ok);
+    ok(!C.validateConfig(null).ok);
+  });
+  t("validateConfig fills defaults for a minimal config", () => {
+    const r = C.validateConfig({});
+    ok(r.ok);
+    eq(r.cfg.pageSeconds, 12);
+    eq(r.cfg.overscanPercent, 7);
+    eq(r.cfg.colors.pageCycle, ["blue", "green", "red", "cyan"]);
+    ok(r.cfg.rotation.length >= 1);
+  });
+  t("validateConfig clamps overscan and drops bad slots", () => {
+    const r = C.validateConfig({
+      overscanPercent: 40,
+      feeds: [{ id: "a", url: "http://x" }],
+      rotation: [{ type: "headlines", feed: "missing" }, { type: "clock" }, { type: "wat" }],
+    });
+    eq(r.cfg.overscanPercent, 15);
+    eq(r.cfg.rotation, [{ type: "clock" }]);
+    ok(r.errors.length === 2, "two warnings");
+  });
+  t("validateConfig disables daily reload with false or null", () => {
+    eq(C.validateConfig({ dailyReloadHour: false }).cfg.dailyReloadHour, false);
+    eq(C.validateConfig({ dailyReloadHour: null }).cfg.dailyReloadHour, false);
+    eq(C.validateConfig({}).cfg.dailyReloadHour, 4);
+  });
+  t("validateConfig caps the crawl separator", () => {
+    const r = C.validateConfig({ crawl: { separator: "x".repeat(500) } });
+    ok(r.cfg.crawl.separator.length <= 16, "separator capped");
+  });
+  t("validateConfig sanitizes messages", () => {
+    const r = C.validateConfig({ messages: [{ text: "hi \u{1F600} there" }, { text: "\u{1F600}" }] });
+    eq(r.cfg.messages.length, 1); // emoji-only message dropped entirely
+    eq(r.cfg.messages[0].text, "hi there");
+  });
+  t("validateConfig sanitizes facts and dad jokes", () => {
+    const r = C.validateConfig({ facts: ["Honey never spoils", "\u{1F600}", 42], dadJokes: ["Nacho cheese"] });
+    eq(r.cfg.facts, ["Honey never spoils"]); // emoji-only and non-strings dropped
+    eq(r.cfg.dadJokes, ["Nacho cheese"]);
+  });
+  t("validateConfig accepts a dadjokes rotation slot", () => {
+    const r = C.validateConfig({ rotation: [{ type: "dadjokes" }, { type: "clock" }] });
+    eq(r.cfg.rotation, [{ type: "dadjokes" }, { type: "clock" }]);
+  });
+  t("validateConfig accepts a weather slot and keeps valid coordinates", () => {
+    const r = C.validateConfig({
+      rotation: [{ type: "weather" }, { type: "clock" }],
+      weather: { location: { name: "Boston", latitude: 42.36, longitude: -71.06, timezone: "America/New_York" }, tempUnit: "C", windUnit: "kmh" },
+    });
+    eq(r.cfg.rotation, [{ type: "weather" }, { type: "clock" }]);
+    eq(r.cfg.weather.location.latitude, 42.36);
+    eq(r.cfg.weather.tempUnit, "C");
+    eq(r.cfg.weather.windUnit, "kmh");
+  });
+  t("validateConfig nulls a weather location with bad coordinates", () => {
+    eq(C.validateConfig({ weather: { location: { latitude: 999, longitude: 0 } } }).cfg.weather.location, null);
+    eq(C.validateConfig({}).cfg.weather.tempUnit, "F"); // default unit
+  });
+  t("formatWxTime parses location-local time without tz shift", () => {
+    eq(C.formatWxTime("2026-07-22T05:27", "12h"), "5:27 AM");
+    eq(C.formatWxTime("2026-07-22T20:14", "12h"), "8:14 PM");
+    eq(C.formatWxTime("2026-07-22T20:14", "24h"), "20:14");
+    eq(C.formatWxTime("garbage", "12h"), "");
+  });
+  t("validateConfig fills music defaults and clamps volume", () => {
+    eq(C.validateConfig({}).cfg.music, { enabled: true, shuffle: true, volume: 60 });
+    eq(C.validateConfig({ music: { volume: 999, enabled: false } }).cfg.music, { enabled: false, shuffle: true, volume: 100 });
+  });
+  t("shuffled keeps every element and does not mutate", () => {
+    const src = ["a", "b", "c", "d", "e"];
+    const out = C.shuffled(src);
+    eq(out.length, 5);
+    eq([...out].sort().join(""), "abcde");
+    eq(src.join(""), "abcde");
+  });
+
+  const summary = document.getElementById("summary");
+  summary.textContent = pass + " passed, " + fail + " failed";
+  summary.className = fail ? "bad" : "ok";
+  document.title = (fail ? "FAIL " : "PASS ") + document.title;
+})();
+</script>
+</body>
+</html>

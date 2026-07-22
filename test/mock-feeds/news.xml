@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+<title>Mock News</title>
+<item><title>Town council approves new bike path along the river</title></item>
+<item><title>Local diner&#8217;s pie wins state fair &amp; hearts</title></item>
+<item><title><![CDATA[School committee sets the 2026 budget]]></title></item>
+<item><title>Caf&#233; on Main Street celebrates 25 years &#8212; free coffee &#9749; for all</title></item>
+<item><title>This is a deliberately very long headline written to exercise the one hundred and sixty character cap in the sanitizer so that it must be truncated with an ellipsis at the end of the line</title></item>
+</channel>
+</rss>
