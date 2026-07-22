@@ -1,0 +1,17 @@
+# The live config is seeded from the schema defaults on first run, so it is
+# not committed. Edit it freely; your channel's settings stay local.
+config.json
+
+# Dependencies and build output (there are none by default; cable-82 is
+# dependency-free, but keep these out if you add tooling).
+node_modules/
+dist/
+build/
+
+# Editor and OS cruft.
+.DS_Store
+Thumbs.db
+*.log
+
+# Local tooling artifacts.
+.playwright-mcp/

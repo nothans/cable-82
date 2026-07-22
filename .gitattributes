@@ -1,2 +1,9 @@
-# Auto detect text files and perform LF normalization
+# Auto detect text files and perform LF normalization.
 * text=auto
+
+# Media are binary; never touch their bytes.
+*.mp3 binary
+*.woff binary
+*.woff2 binary
+*.png binary
+*.ico binary
