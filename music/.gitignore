@@ -1,0 +1,14 @@
+# Tracks live here but aren't committed - large binaries, and yours are yours.
+*.mp3
+*.m4a
+*.aac
+*.ogg
+*.oga
+*.opus
+*.wav
+*.flac
+# Keep the folder, its docs, and the two bundled tracks.
+!README.md
+!.gitignore
+!cable-82-1980s.mp3
+!cable-82-1990s.mp3
