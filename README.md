@@ -9,7 +9,9 @@ It turns any screen - ideally an old 4:3 CRT fed by a Raspberry Pi - into a scro
 No build step, no frameworks, no database, no accounts.
 You make the channel yours in a control room at `/config` - or by editing one plain `config.json` file.
 
-Weather is one optional strip: a single card with your town's current conditions, hi/lo, and sunrise/sunset, fed by Open-Meteo (free, no account). For a full retro weather *channel*, [ws4kp](https://github.com/netbymatt/ws4kp) does that beautifully.
+Read the [build story on nothans.com](https://nothans.com/cable-82-turn-a-raspberry-pi-and-an-old-crt-into-a-1982-cable-bulletin-board-channel), or watch the [one-minute video of it on the air](https://www.youtube.com/watch?v=d5Jcfx5oN0A).
+
+Weather is one optional strip - current conditions, hi/lo, and sunrise/sunset - fed by Open-Meteo (free, no account). For a full retro weather *channel*, [ws4kp](https://github.com/netbymatt/ws4kp) does that beautifully.
 
 | The time | The weather | A dad joke |
 | :---: | :---: | :---: |
@@ -28,8 +30,8 @@ node server.js
 Open `http://localhost:1982` in a browser.
 You are on the air.
 
-Then open the control room at `http://localhost:1982/config` and make the channel yours: your name, your messages, your feeds, your colors, your page lineup.
-Hit Save and the channel picks up the change within about twenty seconds, no reload needed.
+Then open the control room at `http://localhost:1982/config`: your name, your messages, your feeds, your colors, your page lineup.
+Hit Save and the channel picks it up within about twenty seconds, no reload.
 (Prefer a text editor? Everything lives in `config.json`; edit it directly and the channel still updates.)
 
 ## The screen
@@ -42,8 +44,8 @@ Three zones, period-correct:
 
 ## Configuration (control room or `config.json`)
 
-The control room at `/config` is the friendly way in: a single screen with the whole channel - identity, timing, feeds, the page rotation, community messages, the crawl, and colors.
-It validates every change on the server, writes `config.json`, and the on-air channel reloads itself to match.
+The control room at `/config` is the friendly way in: one screen with the whole channel - identity, timing, feeds, the page rotation, community messages, the crawl, and colors.
+Every change is validated on the server, written to `config.json`, and picked up on air.
 
 `config.json` is the file underneath, and you can hand-edit it just as happily.
 The keys:
