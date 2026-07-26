@@ -145,7 +145,7 @@ The crawl carries one extra item: the latest [CheerLights](https://cheerlights.c
 
 ![The CheerLights color riding the CABLE 82 crawl on a CRT](images/cheerlights-crawl-crt.png)
 
-Turn it off, or make the message yours, in the control room (the CheerLights panel sits between Music and The crawl). Hand-editing instead? It's one block in `config.json`:
+Turn it off, or make the message yours, in the control room. Or, by editing the  `config.json`:
 
 ```json
 "cheerlights": {
@@ -153,10 +153,6 @@ Turn it off, or make the message yours, in the control room (the CheerLights pan
   "template": "THE WORLD IS SET TO {COLOR}"
 }
 ```
-
-If the key is missing entirely, the channel treats it as on with the default message, so older configs pick it up without editing anything.
-
-No API key, no account, no extra dependency - it's one JSON fetch.
 
 ## Testing
 
