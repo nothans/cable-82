@@ -6,7 +6,6 @@ Before feeds, your town had a channel: blue screens, chunky text, the time and t
 CABLE 82 recreates that channel and points it at your life.
 It turns any screen - ideally an old 4:3 CRT fed by a Raspberry Pi - into a scrolling rotation of the date and time, your community messages, fun facts, dad jokes, and live headlines from feeds you choose.
 
-No build step, no frameworks, no database, no accounts.
 You make the channel yours in a control room at `/config` - or by editing one plain `config.json` file.
 
 Read the [build story on nothans.com](https://nothans.com/cable-82-turn-a-raspberry-pi-and-an-old-crt-into-a-1982-cable-bulletin-board-channel), or watch the [one-minute video of it on the air](https://www.youtube.com/watch?v=d5Jcfx5oN0A).
@@ -36,8 +35,6 @@ Hit Save and the channel picks it up within about twenty seconds, no reload.
 
 ## The screen
 
-Three zones, period-correct:
-
 1. **Header band** - channel name and the live time and date, always visible.
 2. **Pages** - full-screen colored pages that hard-cut every 12 seconds: a big clock, your community messages, DID YOU KNOW facts, DAD JOKE groaners, a WEATHER card, and headlines.
 3. **The crawl** - a continuous ticker of headlines along the bottom, fed by RSS.
@@ -46,6 +43,7 @@ Three zones, period-correct:
 
 The control room at `/config` is the friendly way in: one screen with the whole channel - identity, timing, feeds, the page rotation, community messages, the crawl, and colors.
 Every change is validated on the server, written to `config.json`, and picked up on air.
+The two ways in stay honest with each other: if `config.json` changes while a control room is open (a hand edit, or a save from another tab), the open screen warns you, and a stale Save is refused instead of overwriting the newer file.
 
 ![The CABLE 82 control room at /config: the whole channel on one screen](images/config.png)
 
@@ -147,7 +145,18 @@ The crawl carries one extra item: the latest [CheerLights](https://cheerlights.c
 
 ![The CheerLights color riding the CABLE 82 crawl on a CRT](images/cheerlights-crawl-crt.png)
 
-Turn it off, or make the message yours, in the control room. No API key, no account, no extra dependency - it's one JSON fetch.
+Turn it off, or make the message yours, in the control room (the CheerLights panel sits between Music and The crawl). Hand-editing instead? It's one block in `config.json`:
+
+```json
+"cheerlights": {
+  "enabled": true,
+  "template": "THE WORLD IS SET TO {COLOR}"
+}
+```
+
+If the key is missing entirely, the channel treats it as on with the default message, so older configs pick it up without editing anything.
+
+No API key, no account, no extra dependency - it's one JSON fetch.
 
 ## Testing
 

@@ -267,6 +267,14 @@ function createApp(opts = {}) {
       // it to a cross-site request without a CORS preflight we never grant,
       // so a drive-by page can't rewrite the channel.
       if (req.headers["x-cable82-config"] !== "1") return send(res, 403, "MISSING CONFIG HEADER");
+      // Optional optimistic lock: if the control room says which version it
+      // loaded and the file has moved since (a hand edit, another tab), refuse
+      // the stale save instead of silently clobbering the newer config.
+      const saidVersion = req.headers["x-cable82-config-version"];
+      if (saidVersion && saidVersion !== String(configVersion())) {
+        res.writeHead(409, { "content-type": "application/json; charset=utf-8" });
+        return res.end(JSON.stringify({ ok: false, conflict: true, version: String(configVersion()) }));
+      }
       readBody(req, o.maxConfigBytes)
         .then((body) => {
           let raw;

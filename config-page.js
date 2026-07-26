@@ -427,9 +427,30 @@
       $("app").setAttribute("aria-busy", "false");
       $("save").disabled = false;
       setStatus("Loaded. Edit anything, then Save.");
+      startDriftWatch();
     } catch (e) {
       setStatus("Could not reach the server (" + e.message + "). Is CABLE 82 running?", "err");
     }
+  }
+
+  // Warn if config.json moves while this screen is open (a hand edit, or a
+  // save from another tab). The form keeps your edits either way; a stale
+  // Save is refused by the server, so this is the early heads-up.
+  let driftTimer = null;
+  function startDriftWatch() {
+    if (driftTimer) return;
+    driftTimer = setInterval(async () => {
+      try {
+        const r = await fetch("api/config", { cache: "no-store" });
+        if (!r.ok) return;
+        const j = await r.json();
+        if (bootVersion && j.version && j.version !== bootVersion) {
+          setStatus("config.json changed outside this screen. Reload the page to load it; a stale Save will be refused.", "warn");
+        }
+      } catch (e) {
+        /* offline: the save path reports it */
+      }
+    }, 20000);
   }
 
   // ---------------------------------------------------------- gather & save
@@ -503,12 +524,19 @@
     btn.disabled = true;
     setStatus("Saving…");
     try {
+      const headers = { "content-type": "application/json", "x-cable82-config": "1" };
+      if (bootVersion) headers["x-cable82-config-version"] = bootVersion;
       const r = await fetch("api/config", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-cable82-config": "1" },
+        headers,
         body: JSON.stringify(gather()),
       });
       const j = await r.json().catch(() => ({}));
+      if (r.status === 409 || j.conflict) {
+        setStatus("config.json changed outside this screen (a hand edit or another tab). Reload the page to load it, then redo your change.", "err");
+        btn.disabled = false;
+        return;
+      }
       if (!r.ok || j.ok === false) {
         setStatus("Save rejected.", "err");
         showWarnings(j.errors || ["The server refused the change."]);

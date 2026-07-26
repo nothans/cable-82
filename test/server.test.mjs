@@ -316,6 +316,24 @@ test("GET /api/weather is 503 when no location is configured", async () => {
   assert.equal((await fetch(base + "/api/weather")).status, 503);
 });
 
+test("POST /api/config with a stale version header is refused (409)", async () => {
+  const g = await (await fetch(base + "/api/config")).json();
+  const stale = await fetch(base + "/api/config", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-cable82-config": "1", "x-cable82-config-version": "0:stale" },
+    body: JSON.stringify(g.config),
+  });
+  assert.equal(stale.status, 409);
+  assert.equal((await stale.json()).conflict, true);
+  // With the version it actually loaded, the save goes through.
+  const fresh = await fetch(base + "/api/config", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-cable82-config": "1", "x-cable82-config-version": g.version },
+    body: JSON.stringify(g.config),
+  });
+  assert.equal(fresh.status, 200);
+});
+
 // ---------- cheerlights ----------
 
 test("GET /api/cheerlights returns the normalized color when enabled", async () => {
