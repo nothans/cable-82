@@ -8,7 +8,7 @@ It turns any screen - ideally an old 4:3 CRT fed by a Raspberry Pi - into a scro
 
 You make the channel yours in a control room at `/config` - or by editing one plain `config.json` file.
 
-Read the [build story on nothans.com](https://nothans.com/cable-82-turn-a-raspberry-pi-and-an-old-crt-into-a-1982-cable-bulletin-board-channel), or watch the [one-minute video of it on the air](https://www.youtube.com/watch?v=d5Jcfx5oN0A).
+Read the [build story on nothans.com](https://nothans.com/cable-82-turn-a-raspberry-pi-and-an-old-crt-into-a-1982-cable-bulletin-board-channel), watch the [one-minute video of it on the air](https://www.youtube.com/watch?v=d5Jcfx5oN0A), or leave the [full six-minute demo](https://www.youtube.com/watch?v=0YEvI_oFfqY) playing.
 
 Weather is one optional strip - current conditions, hi/lo, and sunrise/sunset - fed by Open-Meteo (free, no account). For a full retro weather *channel*, [ws4kp](https://github.com/netbymatt/ws4kp) does that beautifully.
 
