@@ -47,6 +47,8 @@ Three zones, period-correct:
 The control room at `/config` is the friendly way in: one screen with the whole channel - identity, timing, feeds, the page rotation, community messages, the crawl, and colors.
 Every change is validated on the server, written to `config.json`, and picked up on air.
 
+![The CABLE 82 control room at /config: the whole channel on one screen](images/config.png)
+
 `config.json` is the file underneath, and you can hand-edit it just as happily.
 The keys:
 
