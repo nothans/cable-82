@@ -481,6 +481,22 @@
     </section>
 
     <section class="panel">
+      <h2>CheerLights</h2>
+      <p class="hint"><a href="https://cheerlights.com" target="_blank" rel="noopener">CheerLights</a> is one global color anyone in the world can set. When this is on, the crawl carries the latest color as a ticker item, checked about once a minute. Write <code>{color}</code> where the color name should land.</p>
+      <div class="grid">
+        <div class="field">
+          <label>Ticker</label>
+          <div class="toggle"><input type="checkbox" id="f-cheerEnabled"><label for="f-cheerEnabled">Show the CheerLights color in the crawl</label></div>
+        </div>
+        <div class="field">
+          <label for="f-cheerTemplate">Message</label>
+          <input type="text" id="f-cheerTemplate" maxlength="120" placeholder="THE WORLD IS SET TO {COLOR}">
+          <span class="note">Or: "Right now, the CheerLights color is {color}".</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
       <h2>The crawl</h2>
       <p class="hint">The ticker along the bottom, and the fixed label pinned to its left.</p>
       <div class="grid">

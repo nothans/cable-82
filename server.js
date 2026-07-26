@@ -154,6 +154,8 @@ function createApp(opts = {}) {
       // at a local mock instead of the real service.
       weatherApiBase: "https://api.open-meteo.com/v1/forecast",
       geocodeApiBase: "https://geocoding-api.open-meteo.com/v1/search",
+      // CheerLights (cheerlights.com): the latest global color, one JSON fetch.
+      cheerlightsApiBase: "https://api.thingspeak.com/channels/1417/feeds/last.json",
     },
     opts
   );
@@ -174,6 +176,7 @@ function createApp(opts = {}) {
   const rawLoadConfig = makeConfigLoader(o.configPath);
   const lastGood = new Map(); // feed id -> { body, type }
   let weatherCache = null; // last good normalized weather, so a blip keeps the card up
+  let cheerCache = null; // last good CheerLights color, same idea
 
   // A cheap version token (the file mtime) the display polls to notice a
   // control-room save and reload itself.
@@ -365,6 +368,33 @@ function createApp(opts = {}) {
     }
   }
 
+  // The latest CheerLights color (cheerlights.com): one global color anyone
+  // in the world can set. Fetched server-side like everything else, last
+  // good copy kept so a blip never blanks the ticker item.
+  async function handleCheerlights(res) {
+    const cfg = loadConfig();
+    if (!cfg || !cfg.cheerlights || !cfg.cheerlights.enabled) {
+      return send(res, 503, "CHEERLIGHTS NOT ENABLED");
+    }
+    try {
+      const got = await fetchWithCap(o.cheerlightsApiBase, o.upstreamTimeoutMs, o.maxFeedBytes);
+      const data = JSON.parse(got.body.toString("utf8"));
+      const color = String(data.field1 || "").trim().toLowerCase().slice(0, 24);
+      if (!color || !/^[a-z]+$/.test(color)) throw new Error("no color in feed");
+      const hexRaw = String(data.field2 || "").trim();
+      const out = { color, hex: /^#[0-9a-fA-F]{6}$/.test(hexRaw) ? hexRaw.toLowerCase() : "" };
+      cheerCache = out;
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+      res.end(JSON.stringify(out));
+    } catch (e) {
+      if (cheerCache) {
+        res.writeHead(200, { "content-type": "application/json; charset=utf-8", "x-cable82-stale": "1" });
+        return res.end(JSON.stringify(cheerCache));
+      }
+      send(res, 502, "CHEERLIGHTS UNAVAILABLE: " + e.message);
+    }
+  }
+
   // List the audio files in the music folder (sorted). The display plays
   // them as continuous background music; the control room shows the list.
   function handleMusic(res) {
@@ -417,6 +447,10 @@ function createApp(opts = {}) {
       }
       if (pathname === "/api/music") {
         handleMusic(res);
+        return;
+      }
+      if (pathname === "/api/cheerlights") {
+        handleCheerlights(res).catch((e) => send(res, 500, "SERVER ERROR: " + e.message));
         return;
       }
       if (pathname.startsWith("/api/feed/")) {

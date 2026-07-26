@@ -47,6 +47,10 @@ const upstream = http.createServer((req, res) => {
       current: { temperature_2m: 71.6, weather_code: 2, wind_speed_10m: 8.3 },
       daily: { temperature_2m_max: [78.1], temperature_2m_min: [61.4], sunrise: ["2026-07-22T05:27"], sunset: ["2026-07-22T20:14"] },
     }));
+  } else if (req.url.startsWith("/cheer")) {
+    // ThingSpeak channel 1417 last.json shape: field1 = color, field2 = hex
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ created_at: "2026-07-26T12:00:00Z", field1: "Purple ", field2: "#800080" }));
   } else {
     res.writeHead(404);
     res.end();
@@ -98,6 +102,7 @@ before(async () => {
     maxFeedBytes: 64 * 1024,
     weatherApiBase: `http://127.0.0.1:${upstreamPort}/wx`,
     geocodeApiBase: `http://127.0.0.1:${upstreamPort}/geo`,
+    cheerlightsApiBase: `http://127.0.0.1:${upstreamPort}/cheer`,
   });
   await new Promise((r) => app.listen(0, "127.0.0.1", r));
   base = "http://127.0.0.1:" + app.address().port;
@@ -309,6 +314,28 @@ test("GET /api/weather is 503 when no location is configured", async () => {
   const upstreamPort = upstream.address().port;
   writeConfig(configFor(upstreamPort), 8); // no weather.location
   assert.equal((await fetch(base + "/api/weather")).status, 503);
+});
+
+// ---------- cheerlights ----------
+
+test("GET /api/cheerlights returns the normalized color when enabled", async () => {
+  const upstreamPort = upstream.address().port;
+  const cfg = configFor(upstreamPort);
+  cfg.cheerlights = { enabled: true, template: "THE WORLD IS SET TO {COLOR}" };
+  writeConfig(cfg, 8);
+  const r = await fetch(base + "/api/cheerlights");
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(j.color, "purple"); // trimmed + lowercased
+  assert.equal(j.hex, "#800080");
+});
+
+test("GET /api/cheerlights is 503 when disabled", async () => {
+  const upstreamPort = upstream.address().port;
+  const cfg = configFor(upstreamPort);
+  cfg.cheerlights = { enabled: false };
+  writeConfig(cfg, 8);
+  assert.equal((await fetch(base + "/api/cheerlights")).status, 503);
 });
 
 test("GET /api/music lists only audio files, sorted", async () => {

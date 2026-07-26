@@ -89,9 +89,10 @@
   }
 
   // Interleave items across feeds: news1, tech1, blog1, news2, ...
+  // extras ride at the front of each pass (the CheerLights color, say).
   function buildCrawlText(opts) {
-    const { feedIds = [], labels = {}, items = {}, separator = "  ■  ", fallback = "" } = opts || {};
-    const parts = [];
+    const { feedIds = [], labels = {}, items = {}, separator = "  ■  ", fallback = "", extras = [] } = opts || {};
+    const parts = extras.filter((t) => typeof t === "string" && t);
     const max = Math.max(0, ...feedIds.map((id) => (items[id] || []).length));
     for (let k = 0; k < max; k++) {
       for (const id of feedIds) {
@@ -119,6 +120,12 @@
     const mm = m[2];
     if (mode === "24h") return String(hh).padStart(2, "0") + ":" + mm;
     return (hh % 12 || 12) + ":" + mm + " " + (hh < 12 ? "AM" : "PM");
+  }
+
+  // "THE WORLD IS SET TO {COLOR}" + "purple" -> "THE WORLD IS SET TO PURPLE"
+  function cheerlightsLine(template, color) {
+    if (typeof color !== "string" || !color) return "";
+    return String(template || "").replace(/\{color\}/gi, color.toUpperCase());
   }
 
   function formatHeaderDate(d) {
@@ -164,6 +171,7 @@
     parseFeed,
     makeRR,
     buildCrawlText,
+    cheerlightsLine,
     shuffled,
     formatClock,
     formatHeaderDate,
@@ -249,6 +257,7 @@
       dadJokes: cfg.dadJokes && cfg.dadJokes.length ? cfg.dadJokes : FALLBACK_JOKES,
       messages: cfg.messages,
       weather: null, // filled by the weather loop when a weather slot exists
+      cheerlights: null, // filled by the CheerLights loop when enabled
     };
     const labels = Object.fromEntries(cfg.feeds.map((f) => [f.id, f.label]));
 
@@ -323,6 +332,23 @@
       }
       const everyMs = soak ? 5000 : 15 * 60000;
       weatherTimer = setTimeout(refreshWeather, everyMs);
+    }
+
+    // ---------------- cheerlights
+
+    // One global color the whole internet shares (cheerlights.com). It rides
+    // the crawl, so poll only when enabled. Colors change on people's whims:
+    // once a minute keeps the ticker honest without hammering anything.
+    const usesCheerlights = cfg.cheerlights && cfg.cheerlights.enabled;
+    let cheerTimer = null;
+    async function refreshCheerlights() {
+      try {
+        const r = await fetch("api/cheerlights", { cache: "no-store", signal: AbortSignal.timeout(12000) });
+        if (r.ok) store.cheerlights = await r.json();
+      } catch (e) {
+        /* keep the last color; try again next tick */
+      }
+      cheerTimer = setTimeout(refreshCheerlights, soak ? 5000 : 60000);
     }
 
     // ---------------- music (continuous background audio)
@@ -495,12 +521,17 @@
         crawlAnim.onfinish = null;
         try { crawlAnim.cancel(); } catch (e) { /* already dead */ }
       }
+      const cheerText =
+        usesCheerlights && store.cheerlights
+          ? cheerlightsLine(cfg.cheerlights.template, store.cheerlights.color)
+          : "";
       const text = buildCrawlText({
         feedIds: cfg.crawl.feeds,
         labels,
         items: store.feeds,
         separator: cfg.crawl.separator,
         fallback: cfg.channelName + (cfg.tagline ? " " + cfg.crawl.separator + " " + cfg.tagline : ""),
+        extras: cheerText ? ["CHEERLIGHTS: " + cheerText] : [],
       });
       el.track.textContent = text;
       // Measure the scrolling window (the space to the right of the fixed
@@ -577,6 +608,7 @@
     tickClock();
     cfg.feeds.forEach((f, i) => scheduleFeed(f, 500 + i * 2000)); // staggered first fetch
     if (usesWeather) refreshWeather();
+    if (usesCheerlights) refreshCheerlights();
     if (cfg.music.enabled) setupMusic();
     startScheduler();
     document.fonts.ready.then(safeStartCrawl).catch(safeStartCrawl); // measure with the real font

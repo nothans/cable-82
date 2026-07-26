@@ -298,6 +298,10 @@
     updateVolumeOut();
     renderTrackList();
 
+    const cheer = cfg.cheerlights || {};
+    $("f-cheerEnabled").checked = cheer.enabled !== false;
+    $("f-cheerTemplate").value = cheer.template || "THE WORLD IS SET TO {COLOR}";
+
     feeds = (cfg.feeds || []).map((f) => ({ id: f.id, label: f.label, url: f.url }));
     rotation = (cfg.rotation || []).map((s) => (s.type === "headlines" ? { type: "headlines", feed: s.feed } : { type: s.type }));
     messages = (cfg.messages || []).map((m) => ({ text: m.text, color: m.color || null }));
@@ -466,6 +470,10 @@
         enabled: $("f-musicEnabled").checked,
         shuffle: $("f-musicShuffle").checked,
         volume: Number($("f-musicVolume").value),
+      },
+      cheerlights: {
+        enabled: $("f-cheerEnabled").checked,
+        template: $("f-cheerTemplate").value,
       },
       feeds: feeds.map((f) => ({ id: f.id, label: f.label, url: f.url })),
       rotation: rotation.map((s) => (s.type === "headlines" ? { type: "headlines", feed: s.feed } : { type: s.type })),

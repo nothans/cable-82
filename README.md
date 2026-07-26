@@ -68,6 +68,7 @@ The keys:
 | `dadJokes` | Dad jokes shown under a DAD JOKE card, one string each | 15 samples |
 | `weather` | One weather strip via Open-Meteo: `location` (geocoded, with `timezone`), `tempUnit` (`F`/`C`), `windUnit` (`mph`/`kmh`). Set it in the control room | Boston, `F`, `mph` |
 | `music` | Background music from the `music/` folder: `enabled`, `shuffle`, `volume` (0-100) | on, shuffled, 60 |
+| `cheerlights` | The latest [CheerLights](https://cheerlights.com) color as a crawl item: `enabled`, `template` (`{color}` becomes the color name) | on, `THE WORLD IS SET TO {COLOR}` |
 | `colors` | `pageCycle`, `headerBg`, `crawlBg` | period palette |
 | `overscanPercent` | Safe margin for CRT overscan, 0-15 | `7` |
 | `dailyReloadHour` | Daily kiosk self-reload hour, or `false` | `4` |
@@ -139,6 +140,14 @@ Two tracks ship with the channel, a 1980s one and a 1990s one; the rest is up to
 Turn music on or off, shuffle, and set the volume in the control room.
 
 Browsers block autoplay until a user gesture, so on a desktop the music starts on your first click; on the Pi kiosk the `--autoplay-policy=no-user-gesture-required` flag above starts it from boot.
+
+## CheerLights
+
+The crawl carries one extra item: the latest [CheerLights](https://cheerlights.com) color. CheerLights is a single global color that anyone in the world can set, and every connected light on the planet follows along. CABLE 82 checks it about once a minute (server-side, like every other fetch) and scrolls your message with the color name filled in: `THE WORLD IS SET TO {COLOR}` comes out as `THE WORLD IS SET TO PURPLE`.
+
+![The CheerLights color riding the CABLE 82 crawl on a CRT](images/cheerlights-crawl-crt.png)
+
+Turn it off, or make the message yours, in the control room. No API key, no account, no extra dependency - it's one JSON fetch.
 
 ## Testing
 

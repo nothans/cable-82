@@ -160,6 +160,13 @@
       shuffle: true,
       volume: 60,
     },
+    // The latest CheerLights color (cheerlights.com) rides the crawl as one
+    // ticker item. One global color anyone in the world can set; {color} in
+    // the template becomes the color name.
+    cheerlights: {
+      enabled: true,
+      template: "THE WORLD IS SET TO {COLOR}",
+    },
     colors: {
       pageCycle: ["blue", "green", "red", "cyan"],
       headerBg: "blue",
@@ -277,6 +284,15 @@
       enabled: typeof rawMusic.enabled === "boolean" ? rawMusic.enabled : true,
       shuffle: typeof rawMusic.shuffle === "boolean" ? rawMusic.shuffle : true,
       volume: Math.round(clampNum(rawMusic.volume, 0, 100, 60)),
+    };
+
+    const rawCheer = raw.cheerlights && typeof raw.cheerlights === "object" ? raw.cheerlights : {};
+    cfg.cheerlights = {
+      enabled: typeof rawCheer.enabled === "boolean" ? rawCheer.enabled : true,
+      template:
+        typeof rawCheer.template === "string" && rawCheer.template.trim()
+          ? sanitize(rawCheer.template, 120)
+          : "THE WORLD IS SET TO {COLOR}",
     };
 
     cfg.feeds = (Array.isArray(raw.feeds) ? raw.feeds : [])
