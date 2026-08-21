@@ -18,16 +18,28 @@ Weather is one optional strip - current conditions, hi/lo, and sunrise/sunset - 
 
 ## Quick start
 
-You need Node.js 18 or newer.
+You need Node.js 18 or newer: `node -v` should print `v18` or higher.
+(No `node` at all, or an older one?
+See [Node.js on a Raspberry Pi](#nodejs-on-a-raspberry-pi) below; the same commands work on any Debian or Ubuntu machine.)
 
 ```
-git clone <this repo>
+git clone https://github.com/nothans/cable-82
 cd cable-82
 node server.js
 ```
 
-Open `http://localhost:1982` in a browser.
+The server prints every address it answers on:
+
+```
+CABLE 82 broadcasting
+  http://localhost:1982   (a browser on this machine)
+  http://192.168.1.42:1982   (a browser on another device on your network)
+Control room: http://localhost:1982/config
+```
+
+Open the first one in a browser on the same machine, or the second one from a laptop or phone on the same Wi-Fi.
 You are on the air.
+(If it prints something else instead, it is telling you why it could not start; see [Troubleshooting](#troubleshooting).)
 
 Then open the control room at `http://localhost:1982/config`: your name, your messages, your feeds, your colors, your page lineup.
 Hit Save and the channel picks it up within about twenty seconds, no reload.
@@ -82,6 +94,23 @@ If the network dies entirely, the clock, messages, and facts keep going forever.
 
 On a Raspberry Pi with Raspberry Pi OS:
 
+### Node.js on a Raspberry Pi
+
+Raspberry Pi OS does not ship with Node.js, and the version its own `apt` offers depends on the OS release: Bookworm (2023) and Trixie (2025) give Node 18 or 20, which work; Bullseye (2021) and older give Node 12, which does not.
+The sure way on any release, any Pi from the 2 onward:
+
+```
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs
+node -v
+```
+
+`node -v` should now print `v22`.
+(A Pi 1, Pi Zero, or Zero W is ARMv6; NodeSource does not build for it, and Chromium in kiosk mode is a struggle there anyway.
+Start at a Pi 2, and a Pi 3 B+ or 4 runs the channel comfortably.)
+
+Then clone and start the channel exactly as in Quick start, and read the addresses it prints.
+
 1. **Get the picture onto the TV.** Two ways in, depending on your Pi and your set:
 
    - **Coax / antenna input (works on any Pi, and the reliable one):** run HDMI from the Pi into an [HDMI-to-coax RF modulator](https://amzn.to/4ftrKsq), then coax from the modulator into the TV's antenna terminal. Tune the TV to **channel 3 or 4** to match the modulator. Any Raspberry Pi and any CRT with a coax input will do this.
@@ -109,7 +138,9 @@ On a Raspberry Pi with Raspberry Pi OS:
    WantedBy=multi-user.target
    ```
 
-   Then `sudo systemctl enable --now cable82`.
+   Replace `pi` (both places) with your own username if it differs: `whoami` tells you, and newer Raspberry Pi OS images let you pick any name at setup.
+   `which node` confirms the path on the `ExecStart` line.
+   Then `sudo systemctl enable --now cable82`, and `systemctl status cable82` should say `active (running)` with the broadcasting lines in its log.
 
 3. **Chromium in kiosk mode** (autostart or a systemd user unit):
 
@@ -129,6 +160,36 @@ On a Raspberry Pi with Raspberry Pi OS:
 
 If the TV crops the edges, raise the overscan margin in the control room (or `overscanPercent` in `config.json`) until nothing is cut off.
 There are no fake scanline filters in CABLE 82: the CRT is the filter.
+
+## Troubleshooting
+
+**"localhost refused to connect"** means nothing is listening on that port, so the server is not running.
+Open a terminal on the Pi, `cd cable-82`, run `node server.js`, and read what it prints.
+It either says `CABLE 82 broadcasting` with a list of addresses, or it tells you why it could not start:
+
+- `node: command not found`: Node.js is not installed. See [Node.js on a Raspberry Pi](#nodejs-on-a-raspberry-pi).
+- `CABLE 82 needs Node.js 18 or newer`: the Node.js you have is too old (Raspberry Pi OS Bullseye's `apt` gives Node 12). Same fix.
+- `PORT 1982 IS ALREADY IN USE`: a copy is already running, probably the systemd service. That copy is the channel; open the browser at it, or stop it with `sudo systemctl stop cable82` while you test by hand.
+- Anything else: the message is the clue. Paste it into an issue and it will get answered.
+
+While the server is running, prove it from the Pi itself, no browser involved: `curl -s http://localhost:1982 | head -3` should print the start of a web page.
+
+**The browser is on a different device than the server.**
+`localhost` always means "this device", so `http://localhost:1982` on a laptop looks for a server on the laptop.
+Use one of the other addresses the server printed, the ones with a `192.168.x.x`-style IP; `hostname -I` on the Pi prints the same IPs.
+The `192.168.1.42` in these docs is an example, not your Pi's address.
+
+**"Address unreachable"** means that IP is not on your network or is not the Pi: use the address the server printed, and make sure the Pi and the browsing device are on the same Wi-Fi or LAN.
+
+**"raspberrypi.local" does not resolve** when the Pi's hostname is not `raspberrypi` (newer images let you choose), or when the browsing device lacks mDNS (older Windows, some Android).
+`hostname` on the Pi shows its name; the IP address works regardless.
+
+**The channel is up but feeds, weather, or CheerLights are blank.**
+The clock, messages, facts, and jokes never need the network; the rest is fetched by the server.
+`journalctl -u cable82 -f` (or the terminal) logs each fetch failure with the reason.
+
+**The systemd service will not start**: `systemctl status cable82` shows why.
+The usual suspects are `User=` naming an account that does not exist, `ExecStart=` pointing at a `node` that is not at `/usr/bin/node` (`which node`), or the repo living somewhere other than `/home/pi/cable-82`.
 
 ## Music
 

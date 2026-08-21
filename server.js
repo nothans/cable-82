@@ -7,7 +7,31 @@
    Node >= 18 (built-in fetch). */
 "use strict";
 
+// Node older than 18 cannot load this file at all: it has no `node:` module
+// prefix (Node 12) or no built-in fetch (Node 16), and the error it dies
+// with ("Cannot find module 'node:http'") tells nobody what went wrong.
+// Raspberry Pi OS Bullseye ships Node 12 from apt. Say it in plain words,
+// before anything else runs. Keep this block free of syntax Node 10 or 12
+// cannot parse, or they crash before reaching it.
+const NODE_MAJOR = Number(String(process.versions.node).split(".")[0]);
+if (NODE_MAJOR < 18) {
+  process.stderr.write(
+    "\n" +
+    "CABLE 82 needs Node.js 18 or newer. This is Node v" + process.versions.node + ".\n" +
+    "\n" +
+    "On a Raspberry Pi (or any Debian/Ubuntu machine), install a current Node.js:\n" +
+    "\n" +
+    "  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -\n" +
+    "  sudo apt-get install -y nodejs\n" +
+    "\n" +
+    "Then check with `node -v` and run `node server.js` again.\n" +
+    "\n"
+  );
+  process.exit(1);
+}
+
 const http = require("node:http");
+const os = require("node:os");
 const fs = require("node:fs");
 const path = require("node:path");
 const SCHEMA = require("./config-schema.js");
@@ -485,6 +509,23 @@ function parseArgs(argv) {
   return args;
 }
 
+// Every address the channel answers on: localhost for a browser on this
+// machine, then each LAN IPv4 address for a browser on any other device.
+// "localhost" is the first thing people type from a laptop and the first
+// thing that cannot work there, so the real addresses go on screen at start.
+function listenUrls(port) {
+  const urls = ["http://localhost:" + port];
+  const ifaces = os.networkInterfaces();
+  for (const name of Object.keys(ifaces)) {
+    for (const addr of ifaces[name] || []) {
+      if (addr.internal) continue;
+      if (addr.family !== "IPv4" && addr.family !== 4) continue;
+      urls.push("http://" + addr.address + ":" + port);
+    }
+  }
+  return urls;
+}
+
 if (require.main === module) {
   const args = parseArgs(process.argv.slice(2));
   const server = createApp(args);
@@ -498,12 +539,17 @@ if (require.main === module) {
     throw e;
   });
   server.listen(port, () => {
-    console.log(
-      "CABLE 82 broadcasting on http://localhost:" + port +
-      (args.mock ? "  [mock feeds]" : "") +
-      (args.chaos ? "  [chaos on]" : "")
-    );
+    const urls = listenUrls(port);
+    const lines = [
+      "CABLE 82 broadcasting" +
+        (args.mock ? "  [mock feeds]" : "") +
+        (args.chaos ? "  [chaos on]" : ""),
+      "  " + urls[0] + "   (a browser on this machine)",
+    ];
+    for (const u of urls.slice(1)) lines.push("  " + u + "   (a browser on another device on your network)");
+    lines.push("Control room: " + urls[0] + "/config");
+    console.log(lines.join("\n"));
   });
 }
 
-module.exports = { createApp };
+module.exports = { createApp, listenUrls };

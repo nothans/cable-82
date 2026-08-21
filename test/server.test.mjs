@@ -8,7 +8,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { createApp } = require("../server.js");
+const { createApp, listenUrls } = require("../server.js");
 
 // ---------- upstream mock (the "internet") ----------
 
@@ -383,4 +383,14 @@ test("GET /api/weather returns normalized current conditions", async () => {
   assert.equal(j.tempHi, 78);
   assert.equal(j.tempLo, 61);
   assert.equal(j.sunrise, "2026-07-22T05:27");
+});
+
+test("listenUrls leads with localhost and lists every LAN IPv4 address", () => {
+  const urls = listenUrls(1982);
+  assert.equal(urls[0], "http://localhost:1982");
+  const lan = Object.values(os.networkInterfaces()).flat()
+    .filter((a) => !a.internal && (a.family === "IPv4" || a.family === 4))
+    .map((a) => "http://" + a.address + ":1982");
+  assert.deepEqual(urls.slice(1), lan);
+  for (const u of urls) assert.equal(new URL(u).port, "1982");
 });
