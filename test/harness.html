@@ -140,6 +140,8 @@
     ok(r.ok);
     eq(r.cfg.pageSeconds, 12);
     eq(r.cfg.overscanPercent, 7);
+    eq(r.cfg.crtMode, false);
+    eq(r.cfg.textScale, 1);
     eq(r.cfg.colors.pageCycle, ["blue", "green", "red", "cyan"]);
     ok(r.cfg.rotation.length >= 1);
   });
@@ -152,6 +154,21 @@
     eq(r.cfg.overscanPercent, 15);
     eq(r.cfg.rotation, [{ type: "clock" }]);
     ok(r.errors.length === 2, "two warnings");
+  });
+  t("validateConfig clamps textScale and only honors a true crtMode", () => {
+    eq(C.validateConfig({ textScale: 3 }).cfg.textScale, 1.5);
+    eq(C.validateConfig({ textScale: 0.2 }).cfg.textScale, 1);
+    eq(C.validateConfig({ textScale: "1.25" }).cfg.textScale, 1.25);
+    eq(C.validateConfig({ crtMode: true }).cfg.crtMode, true);
+    eq(C.validateConfig({ crtMode: "yes" }).cfg.crtMode, false);
+  });
+  t("resolveColor and textColorFor honor the CRT palette", () => {
+    eq(C.resolveColor("blue", "blue"), C.PALETTE.blue);
+    eq(C.resolveColor("blue", "blue", C.PALETTE_CRT), C.PALETTE_CRT.blue);
+    eq(C.resolveColor("#123456", "blue", C.PALETTE_CRT), "#123456");
+    eq(C.textColorFor("red", C.PALETTE_CRT), C.PALETTE_CRT.white);
+    eq(C.textColorFor("cyan", C.PALETTE_CRT), C.PALETTE_CRT.ink);
+    ok(Object.keys(C.PALETTE_CRT).join() === Object.keys(C.PALETTE).join(), "same names");
   });
   t("validateConfig disables daily reload with false or null", () => {
     eq(C.validateConfig({ dailyReloadHour: false }).cfg.dailyReloadHour, false);

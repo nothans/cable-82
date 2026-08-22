@@ -11,6 +11,7 @@
   // rest of the file reads unchanged.
   const S = (typeof window !== "undefined" && window.Cable82Schema) || {};
   const PALETTE = S.PALETTE || {};
+  const PALETTE_CRT = S.PALETTE_CRT || PALETTE;
   const clampNum = S.clampNum;
   const resolveColor = S.resolveColor;
   const textColorFor = S.textColorFor;
@@ -164,6 +165,7 @@
 
   window.Cable82 = {
     PALETTE,
+    PALETTE_CRT,
     clampNum,
     resolveColor,
     textColorFor,
@@ -237,14 +239,19 @@
     }
 
     // static chrome
+    // CRT mode swaps the palette and drops the drop shadow (style.css does the
+    // rest off the class); textScale enlarges the small text.
+    const pal = cfg.crtMode ? PALETTE_CRT : PALETTE;
+    stage.classList.toggle("crt", cfg.crtMode);
+    stage.style.setProperty("--ts", String(cfg.textScale));
     stage.style.setProperty("--ovp", String(cfg.overscanPercent));
-    stage.style.setProperty("--header-bg", resolveColor(cfg.colors.headerBg, "blue"));
-    stage.style.setProperty("--crawl-bg", resolveColor(cfg.colors.crawlBg, "ink"));
-    el.header.style.color = textColorFor(cfg.colors.headerBg);
-    el.crawlBand.style.color = textColorFor(cfg.colors.crawlBg);
+    stage.style.setProperty("--header-bg", resolveColor(cfg.colors.headerBg, "blue", pal));
+    stage.style.setProperty("--crawl-bg", resolveColor(cfg.colors.crawlBg, "ink", pal));
+    el.header.style.color = textColorFor(cfg.colors.headerBg, pal);
+    el.crawlBand.style.color = textColorFor(cfg.colors.crawlBg, pal);
     // The station bug inverts against the header band.
-    stage.style.setProperty("--bug-bg", textColorFor(cfg.colors.headerBg));
-    stage.style.setProperty("--bug-fg", resolveColor(cfg.colors.headerBg, "blue"));
+    stage.style.setProperty("--bug-bg", textColorFor(cfg.colors.headerBg, pal));
+    stage.style.setProperty("--bug-fg", resolveColor(cfg.colors.headerBg, "blue", pal));
     el.chName.textContent = cfg.channelName;
     el.chTagline.textContent = cfg.tagline;
     el.crawlFlag.textContent = cfg.crawl.flag;
@@ -411,8 +418,29 @@
 
     function paintPage(colorName) {
       const bgName = colorName && (PALETTE[colorName] || /^#/.test(colorName)) ? colorName : nextCycleColor();
-      el.page.style.background = resolveColor(bgName, "blue");
-      el.page.style.color = textColorFor(bgName);
+      el.page.style.background = resolveColor(bgName, "blue", pal);
+      el.page.style.color = textColorFor(bgName, pal);
+    }
+
+    // Shrink the page content (never the kicker) just enough to fit the page
+    // area. A long fact, the weather card on a 480-line screen, or a big
+    // textScale would otherwise slide under the crawl. style.css multiplies
+    // the page font sizes by --fit.
+    function fitPage() {
+      const pg = el.page;
+      pg.style.setProperty("--fit", "1");
+      pg.classList.remove("tight");
+      if (pg.scrollHeight <= pg.clientHeight) return;
+      // First give up the least important line (sunrise/sunset on the weather
+      // card), then shrink whatever is left.
+      pg.classList.add("tight");
+      let k = 1;
+      for (let i = 0; i < 6; i++) {
+        const over = pg.scrollHeight - pg.clientHeight;
+        if (over <= 0) break;
+        k = Math.max(0.5, k * (pg.clientHeight / pg.scrollHeight) * 0.97);
+        pg.style.setProperty("--fit", k.toFixed(3));
+      }
     }
 
     function renderTextPage(kicker, text, colorName) {
@@ -421,6 +449,7 @@
       el.kicker.textContent = kicker;
       el.body.textContent = text;
       el.body.classList.toggle("big", text.length <= 34);
+      fitPage();
     }
 
     function renderClockPage() {
@@ -430,6 +459,7 @@
       const now = new Date();
       el.pageTime.textContent = formatClock(now, cfg.timeFormat);
       el.pageDate.textContent = formatLongDate(now);
+      fitPage();
     }
 
     function renderWeatherPage(w) {
@@ -446,6 +476,7 @@
       const sr = formatWxTime(w.sunrise, cfg.timeFormat);
       const ss = formatWxTime(w.sunset, cfg.timeFormat);
       el.wxSun.textContent = sr && ss ? "SUNRISE " + sr + "   SUNSET " + ss : "";
+      fitPage();
     }
 
     function renderSlot(slot) {

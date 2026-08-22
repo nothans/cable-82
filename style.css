@@ -49,6 +49,9 @@ html, body { height: 100%; background: var(--letterbox); }
   text-transform: uppercase;
   color: var(--c-white);
   --u: calc(100cqw / 640);
+  /* Text scale from config (1-1.5): body, kicker, crawl, and the small header
+     lines grow; the big clock and temperature already fill their space. */
+  --ts: 1;
   /* Overscan safe margins. --ovp is set from config (percent, 0-15). */
   --ovp: 7;
   --ovx: calc(var(--u) * 640 * var(--ovp) / 100);
@@ -60,6 +63,22 @@ html, body { height: 100%; background: var(--letterbox); }
   --rule: var(--c-white);
   --flag-bg: var(--c-red);
   --flag-fg: var(--c-white);
+}
+
+/* CRT mode (config crtMode): the composite / RF path smears saturated color,
+   clips pure white, and turns a hard 2-unit shadow into ringing. Softer
+   palette, 90% white, no shadow. app.js sets the class and passes the same
+   palette to the page colors. */
+#stage.crt {
+  --c-blue: #2C48A0;
+  --c-cyan: #3098A4;
+  --c-green: #2C8C48;
+  --c-yellow: #B09030;
+  --c-red: #A84038;
+  --c-magenta: #9C4890;
+  --c-white: #E4E4E0;
+  --c-ink: #181820;
+  --shadow: transparent;
 }
 
 /* Every glyph on the stage carries the hard CG drop shadow. */
@@ -96,10 +115,10 @@ html, body { height: 100%; background: var(--letterbox); }
   letter-spacing: calc(var(--u) * 2);
   text-shadow: none;
 }
-#ch-tagline { font-size: calc(var(--u) * 16); margin-top: calc(var(--u) * 8); }
+#ch-tagline { font-size: calc(var(--u) * 16 * var(--ts)); margin-top: calc(var(--u) * 8); }
 #header-right { text-align: right; }
 #ch-clock { font-size: calc(var(--u) * 32); }
-#ch-date { font-size: calc(var(--u) * 16); margin-top: calc(var(--u) * 6); }
+#ch-date { font-size: calc(var(--u) * 16 * var(--ts)); margin-top: calc(var(--u) * 6); }
 
 /* ---- Page area ---- */
 
@@ -117,7 +136,7 @@ html, body { height: 100%; background: var(--letterbox); }
 }
 
 #page-kicker {
-  font-size: calc(var(--u) * 20);
+  font-size: calc(var(--u) * 20 * var(--ts));
   line-height: 1;
   padding: calc(var(--u) * 8) calc(var(--u) * 18) calc(var(--u) * 6);
   background: var(--c-ink);
@@ -127,8 +146,11 @@ html, body { height: 100%; background: var(--letterbox); }
 }
 #page-kicker:empty { display: none; }
 
+/* --fit is set by app.js after each page renders: 1 normally, less when the
+   content would overflow the page area (a long fact, the weather card on a
+   short screen, a big textScale). Kicker and header never shrink. */
 #page-body {
-  font-size: calc(var(--u) * 32);
+  font-size: calc(var(--u) * 32 * var(--ts) * var(--fit, 1));
   line-height: 1.35;
   overflow: hidden;
   display: -webkit-box;
@@ -138,10 +160,10 @@ html, body { height: 100%; background: var(--letterbox); }
   overflow-wrap: break-word;
   max-width: 100%;
 }
-#page-body.big { font-size: calc(var(--u) * 48); line-height: 1.25; -webkit-line-clamp: 4; line-clamp: 4; }
+#page-body.big { font-size: calc(var(--u) * 48 * var(--ts) * var(--fit, 1)); line-height: 1.25; -webkit-line-clamp: 4; line-clamp: 4; }
 
 #page-time { font-size: calc(var(--u) * 64); line-height: 1; }
-#page-date { font-size: calc(var(--u) * 32); line-height: 1.35; }
+#page-date { font-size: calc(var(--u) * 32 * var(--ts)); line-height: 1.35; }
 
 /* Clock page shows time/date; every other page shows kicker/body. */
 #page-time, #page-date { display: none; }
@@ -155,18 +177,20 @@ html, body { height: 100%; background: var(--letterbox); }
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: calc(var(--u) * 10);
+  gap: calc(var(--u) * 10 * var(--fit, 1));
 }
 #page.mode-weather #page-body,
 #page.mode-weather #page-time,
 #page.mode-weather #page-date { display: none; }
 
-#wx-location { font-size: calc(var(--u) * 28); line-height: 1; }
-#wx-temp { font-size: calc(var(--u) * 92); line-height: 1; }
-#wx-cond { font-size: calc(var(--u) * 32); line-height: 1; }
-#wx-hilo { font-size: calc(var(--u) * 26); line-height: 1; }
-#wx-sun { font-size: calc(var(--u) * 18); line-height: 1; margin-top: calc(var(--u) * 4); }
+#wx-location { font-size: calc(var(--u) * 28 * var(--ts) * var(--fit, 1)); line-height: 1; }
+#wx-temp { font-size: calc(var(--u) * 92 * var(--fit, 1)); line-height: 1; }
+#wx-cond { font-size: calc(var(--u) * 32 * var(--ts) * var(--fit, 1)); line-height: 1; }
+#wx-hilo { font-size: calc(var(--u) * 26 * var(--ts) * var(--fit, 1)); line-height: 1; }
+#wx-sun { font-size: calc(var(--u) * 18 * var(--ts) * var(--fit, 1)); line-height: 1; margin-top: calc(var(--u) * 4); }
 #wx-sun:empty { display: none; }
+/* Set by app.js fitPage() when the page would overflow: the sun line goes first. */
+#page.tight #wx-sun { display: none; }
 
 /* ---- Crawl band ---- */
 
@@ -190,7 +214,7 @@ html, body { height: 100%; background: var(--letterbox); }
   padding: calc(var(--u) * 10) calc(var(--u) * 18);
   background: var(--flag-bg);
   color: var(--flag-fg);
-  font-size: calc(var(--u) * 26);
+  font-size: calc(var(--u) * 26 * var(--ts));
   letter-spacing: calc(var(--u) * 2);
   border-right: calc(var(--u) * 3) solid var(--rule);
 }
@@ -207,7 +231,7 @@ html, body { height: 100%; background: var(--letterbox); }
 
 #crawl-track {
   display: inline-block;
-  font-size: calc(var(--u) * 32);
+  font-size: calc(var(--u) * 32 * var(--ts));
   will-change: transform;
 }
 

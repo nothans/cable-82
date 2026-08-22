@@ -21,6 +21,21 @@
     ink: "#101018",
   };
 
+  // CRT mode palette. Composite and RF paths smear saturated color and clip
+  // pure white (it can even buzz the audio), so these sit lower in chroma,
+  // closer in luma, and the white is the broadcast 90%. Same names, same
+  // pairings; only the hex changes.
+  const PALETTE_CRT = {
+    blue: "#2C48A0",
+    cyan: "#3098A4",
+    green: "#2C8C48",
+    yellow: "#B09030",
+    red: "#A84038",
+    magenta: "#9C4890",
+    white: "#E4E4E0",
+    ink: "#181820",
+  };
+
   // Text color paired with each background so contrast never dies.
   const TEXT_ON = {
     blue: "white", green: "white", red: "white", magenta: "white",
@@ -173,6 +188,10 @@
       crawlBg: "ink",
     },
     overscanPercent: 7,
+    // CRT mode: softer palette, no drop shadow. textScale enlarges the body,
+    // kicker, crawl, and small header lines (1 = the original layout).
+    crtMode: false,
+    textScale: 1,
     dailyReloadHour: 4,
   };
 
@@ -185,16 +204,19 @@
     return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : dflt;
   }
 
-  function resolveColor(name, fallbackName) {
+  // `palette` lets the display swap in PALETTE_CRT; names stay the same.
+  function resolveColor(name, fallbackName, palette) {
+    const pal = palette || PALETTE;
     if (typeof name === "string") {
-      if (PALETTE[name]) return PALETTE[name];
+      if (pal[name]) return pal[name];
       if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(name)) return name;
     }
-    return PALETTE[fallbackName] || PALETTE.blue;
+    return pal[fallbackName] || pal.blue;
   }
 
-  function textColorFor(bgName) {
-    if (TEXT_ON[bgName]) return PALETTE[TEXT_ON[bgName]];
+  function textColorFor(bgName, palette) {
+    const pal = palette || PALETTE;
+    if (TEXT_ON[bgName]) return pal[TEXT_ON[bgName]];
     // Raw hex backgrounds: pick text by luminance so contrast never dies.
     const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(typeof bgName === "string" ? bgName : "");
     if (m) {
@@ -204,9 +226,9 @@
         0.2126 * parseInt(h.slice(0, 2), 16) +
         0.7152 * parseInt(h.slice(2, 4), 16) +
         0.0722 * parseInt(h.slice(4, 6), 16);
-      return lum > 145 ? PALETTE.ink : PALETTE.white;
+      return lum > 145 ? pal.ink : pal.white;
     }
-    return PALETTE.white;
+    return pal.white;
   }
 
   // Normalize text to what an 8x16 character generator can show: map
@@ -271,6 +293,8 @@
     cfg.refreshMinutes = clampNum(raw.refreshMinutes, 1, 1440, 10);
     cfg.maxItemsPerFeed = Math.round(clampNum(raw.maxItemsPerFeed, 1, 100, 20));
     cfg.overscanPercent = clampNum(raw.overscanPercent, 0, 15, 7);
+    cfg.crtMode = raw.crtMode === true;
+    cfg.textScale = clampNum(raw.textScale, 1, 1.5, 1);
     cfg.dailyReloadHour =
       raw.dailyReloadHour === false || raw.dailyReloadHour === null
         ? false
@@ -351,6 +375,7 @@
 
   return {
     PALETTE,
+    PALETTE_CRT,
     TEXT_ON,
     TYPES,
     DEFAULT_CONFIG,

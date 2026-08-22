@@ -278,6 +278,8 @@ test("POST /api/config validates, writes, and is reflected", async () => {
   const next = configFor(upstreamPort);
   next.channelName = "TEST CHANNEL";
   next.crawl = { flag: "WIRE", feeds: ["ok"] };
+  next.crtMode = true;
+  next.textScale = 1.25;
   const r = await fetch(base + "/api/config", {
     method: "POST",
     headers: { "content-type": "application/json", "x-cable82-config": "1" },
@@ -288,6 +290,8 @@ test("POST /api/config validates, writes, and is reflected", async () => {
   assert.equal(j.ok, true);
   assert.equal(j.config.channelName, "TEST CHANNEL");
   assert.equal(j.config.crawl.flag, "WIRE");
+  assert.equal(j.config.crtMode, true);
+  assert.equal(j.config.textScale, 1.25);
   // Reflected on a fresh GET and the feed proxy still serves the kept feeds.
   const g = await (await fetch(base + "/api/config")).json();
   assert.equal(g.config.channelName, "TEST CHANNEL");
