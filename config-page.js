@@ -266,6 +266,8 @@
     $("f-refreshMinutes").value = cfg.refreshMinutes;
     $("f-maxItemsPerFeed").value = cfg.maxItemsPerFeed;
     $("f-overscanPercent").value = cfg.overscanPercent;
+    $("f-crtMode").checked = cfg.crtMode === true;
+    $("f-textScale").value = cfg.textScale != null ? cfg.textScale : 1;
     fillReloadSelect(cfg.dailyReloadHour);
 
     const crawl = cfg.crawl || {};
@@ -471,6 +473,8 @@
       refreshMinutes: numVal("f-refreshMinutes"),
       maxItemsPerFeed: numVal("f-maxItemsPerFeed"),
       overscanPercent: numVal("f-overscanPercent"),
+      crtMode: $("f-crtMode").checked,
+      textScale: numVal("f-textScale"),
       dailyReloadHour: reload === "off" ? false : Number(reload),
       facts: linesToArray($("f-facts").value),
       dadJokes: linesToArray($("f-dadJokes").value),

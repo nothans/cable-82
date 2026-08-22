@@ -97,11 +97,6 @@
     padding: var(--sp-4) var(--sp-3) 140px;
   }
 
-  .lede {
-    color: var(--ink-dim);
-    margin: 0 0 var(--sp-4);
-    max-width: 68ch;
-  }
 
   /* ---- panels ---- */
 
@@ -325,11 +320,6 @@
   </header>
 
   <main id="app" aria-busy="true">
-    <p class="lede">
-      This is the whole channel in one screen. Change what you like, hit Save, and the
-      broadcast picks it up within about twenty seconds - no need to touch the TV or the Pi.
-    </p>
-
     <section class="panel">
       <h2>Identity</h2>
       <p class="hint">The name and tagline shown in the header, and the clock format.</p>
@@ -359,7 +349,7 @@
 
     <section class="panel">
       <h2>Timing</h2>
-      <p class="hint">How fast pages turn, how often feeds refresh, and CRT housekeeping.</p>
+      <p class="hint">How fast pages turn, how often feeds refresh, and the daily reload.</p>
       <div class="grid">
         <div class="field">
           <label for="f-pageSeconds">Seconds per page</label>
@@ -374,14 +364,31 @@
           <input type="number" id="f-maxItemsPerFeed" min="1" max="100" step="1">
         </div>
         <div class="field">
-          <label for="f-overscanPercent">Overscan safe margin (%)</label>
-          <input type="number" id="f-overscanPercent" min="0" max="15" step="1">
-          <span class="note">Raise it if your TV crops the edges.</span>
-        </div>
-        <div class="field">
           <label for="f-dailyReloadHour">Daily reload hour</label>
           <select id="f-dailyReloadHour"></select>
           <span class="note">A once-a-day refresh keeps a kiosk healthy.</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>CRT</h2>
+      <p class="hint">For a real tube over composite or an RF modulator.</p>
+      <div class="grid">
+        <div class="field">
+          <label>Picture</label>
+          <div class="toggle"><input type="checkbox" id="f-crtMode"><label for="f-crtMode">CRT mode: softer colors, no drop shadow</label></div>
+          <span class="note">Composite and RF smear saturated red and blue and clip pure white. This calms both.</span>
+        </div>
+        <div class="field">
+          <label for="f-textScale">Text size</label>
+          <input type="number" id="f-textScale" min="1" max="1.5" step="0.05">
+          <span class="note">1 is the original layout. Try 1.25 on a small tube; the big clock stays as it is.</span>
+        </div>
+        <div class="field">
+          <label for="f-overscanPercent">Overscan safe margin (%)</label>
+          <input type="number" id="f-overscanPercent" min="0" max="15" step="1">
+          <span class="note">Raise it if your TV crops the edges.</span>
         </div>
       </div>
     </section>
