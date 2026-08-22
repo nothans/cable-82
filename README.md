@@ -81,6 +81,8 @@ The keys:
 | `cheerlights` | The latest [CheerLights](https://cheerlights.com) color as a crawl item: `enabled`, `template` (`{color}` becomes the color name) | on, `THE WORLD IS SET TO {COLOR}` |
 | `colors` | `pageCycle`, `headerBg`, `crawlBg` | period palette |
 | `overscanPercent` | Safe margin for CRT overscan, 0-15 | `7` |
+| `crtMode` | Softer NTSC-safe palette and no drop shadow, for composite or RF | `false` |
+| `textScale` | Enlarges body, kicker, crawl, and small header text, 1-1.5 | `1` |
 | `dailyReloadHour` | Daily kiosk self-reload hour, or `false` | `4` |
 
 Colors are palette names: `blue`, `cyan`, `green`, `yellow`, `red`, `magenta`.
@@ -92,12 +94,13 @@ If the network dies entirely, the clock, messages, and facts keep going forever.
 
 ## Running it on a real CRT (Raspberry Pi)
 
-On a Raspberry Pi with Raspberry Pi OS:
+Everything below was run end to end on a Raspberry Pi 3 Model B+ with Raspberry Pi OS (64-bit) "Trixie" and a 1987 Magnavox portable over an HDMI-to-RF modulator on channel 3.
+Newer Pis are easier; the notes say where an older one differs.
 
 ### Node.js on a Raspberry Pi
 
 Raspberry Pi OS does not ship with Node.js, and the version its own `apt` offers depends on the OS release: Bookworm (2023) and Trixie (2025) give Node 18 or 20, which work; Bullseye (2021) and older give Node 12, which does not.
-The sure way on any release, any Pi from the 2 onward:
+The sure way on a 64-bit image, any Pi from the 3 onward:
 
 ```
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
@@ -106,59 +109,157 @@ node -v
 ```
 
 `node -v` should now print `v22`.
-(A Pi 1, Pi Zero, or Zero W is ARMv6; NodeSource does not build for it, and Chromium in kiosk mode is a struggle there anyway.
-Start at a Pi 2, and a Pi 3 B+ or 4 runs the channel comfortably.)
+NodeSource builds for 64-bit only these days; on a 32-bit image use `sudo apt install nodejs` and take the distro's Node 20.
+A Pi 1, Pi Zero, or Zero W is ARMv6: Node 20 installs from `apt` and the server runs, but no current browser runs on that chip (Chromium refuses it outright), so it can be the server and never the TV.
+Start at a Pi 2; a Pi 3 B+ or 4 runs the channel comfortably.
 
 Then clone and start the channel exactly as in Quick start, and read the addresses it prints.
 
-1. **Get the picture onto the TV.** Two ways in, depending on your Pi and your set:
+### 1. Feed it properly
 
-   - **Coax / antenna input (works on any Pi, and the reliable one):** run HDMI from the Pi into an [HDMI-to-coax RF modulator](https://amzn.to/4ftrKsq), then coax from the modulator into the TV's antenna terminal. Tune the TV to **channel 3 or 4** to match the modulator. Any Raspberry Pi and any CRT with a coax input will do this.
-   - **Composite out (older Pi with the yellow AV jack, TV with RCA input):** add to `/boot/firmware/config.txt`:
+A Pi 3 wants a 5V 2.5A supply and a short, thick micro-USB cable; a phone charger will boot it and then quietly run it at less than half speed.
+Check:
 
-     ```
-     enable_tvout=1
-     sdtv_mode=0        # NTSC (use 2 for PAL)
-     sdtv_aspect=1      # 4:3
-     ```
+```
+vcgencmd get_throttled
+```
 
-2. **Run the server on boot** - `/etc/systemd/system/cable82.service`:
+`throttled=0x0` is the answer you want.
+Anything else is a complaint: `0xd0005` means under-voltage and throttling right now (and that both have happened since boot), and `vcgencmd measure_clock arm` will show a 1.4GHz Pi idling at 600MHz.
+(`0x80008` on a 3 B+ is its own soft temperature limit at 60C, normal with Chromium running, and not a power problem.)
 
-   ```
-   [Unit]
-   Description=CABLE 82
-   After=network-online.target
+### 2. Run the server on boot
 
-   [Service]
-   ExecStart=/usr/bin/node /home/pi/cable-82/server.js
-   Restart=always
-   User=pi
+`/etc/systemd/system/cable82.service`:
 
-   [Install]
-   WantedBy=multi-user.target
-   ```
+```
+[Unit]
+Description=CABLE 82
+After=network-online.target
 
-   Replace `pi` (both places) with your own username if it differs: `whoami` tells you, and newer Raspberry Pi OS images let you pick any name at setup.
-   `which node` confirms the path on the `ExecStart` line.
-   Then `sudo systemctl enable --now cable82`, and `systemctl status cable82` should say `active (running)` with the broadcasting lines in its log.
+[Service]
+ExecStart=/usr/bin/node /home/pi/cable-82/server.js
+Restart=always
+User=pi
 
-3. **Chromium in kiosk mode** (autostart or a systemd user unit):
+[Install]
+WantedBy=multi-user.target
+```
 
-   ```
-   chromium-browser --kiosk --noerrdialogs --disable-infobars \
-     --disable-lcd-text \
-     --autoplay-policy=no-user-gesture-required \
-     http://localhost:1982
-   ```
+Replace `pi` (both places) with your own username if it differs: `whoami` tells you, and newer Raspberry Pi OS images let you pick any name at setup.
+`which node` confirms the path on the `ExecStart` line.
+Then `sudo systemctl enable --now cable82`, and `systemctl status cable82` should say `active (running)` with the broadcasting lines in its log.
 
-   (`--disable-lcd-text` turns off subpixel font smoothing, which tints
-   the chunky text pink on some displays. A CRT does not care, but it
-   keeps flat screens honest too. `--autoplay-policy=no-user-gesture-required`
-   lets the background music start on boot without anyone clicking.)
+### 3. Chromium in kiosk mode
 
-4. **Stop the screen from blanking**: `sudo raspi-config` > Display Options > Screen Blanking > No.
+The Raspberry Pi OS desktop logs in by itself and runs a Wayland session (the compositor is labwc).
+Put this in `~/.config/labwc/autostart` and it opens Chromium full screen on the channel at every login:
 
-If the TV crops the edges, raise the overscan margin in the control room (or `overscanPercent` in `config.json`) until nothing is cut off.
+```
+# CABLE 82 kiosk: wait for the channel server, then put Chromium on it full screen.
+until curl -s -o /dev/null http://localhost:1982; do sleep 1; done
+/usr/bin/lwrespawn /usr/bin/chromium http://localhost:1982 \
+  --kiosk --noerrdialogs --disable-infobars --no-first-run --no-memcheck \
+  --disable-lcd-text --autoplay-policy=no-user-gesture-required \
+  --enable-features=OverlayScrollbar --password-store=basic --start-maximized &
+```
+
+The `until curl` loop keeps Chromium from winning the race at boot and showing "localhost refused to connect" forever.
+`lwrespawn` restarts the browser if it ever dies.
+`--no-memcheck` silences Chromium's low-memory warning on a 1GB Pi, `--disable-lcd-text` keeps the chunky text from going pink at the edges, `--autoplay-policy=no-user-gesture-required` lets the music start without a click, and `--password-store=basic` stops the keyring prompt.
+(On Bookworm and earlier the binary was `chromium-browser` and the autostart file was `/etc/xdg/lxsession/LXDE-pi/autostart`; Trixie has neither.)
+
+Then stop the screen from blanking:
+
+```
+sudo raspi-config nonint do_blanking 1
+```
+
+If a pointer shows up on the TV with no mouse attached (the HDMI CEC input counts as one), give labwc a key that hides it and press it from the autostart.
+Copy `/etc/xdg/labwc/rc.xml` to `~/.config/labwc/rc.xml`, add inside `<keyboard>`:
+
+```
+<keybind key="A-W-h"><action name="HideCursor"/></keybind>
+```
+
+then `sudo apt install wtype` and append to the autostart:
+
+```
+(sleep 10; wtype -M alt -M logo -P h -p h -m logo -m alt) &
+```
+
+### 4. Get the picture onto the TV
+
+Two ways in, depending on your TV.
+
+**Coax / antenna input (works on any Pi and any TV):** run HDMI from the Pi into an [HDMI-to-RF modulator](https://www.amazon.com/dp/B0DRCZKLBQ?tag=nothans), coax from the modulator into the TV's antenna terminal, and tune the TV to **channel 3 or 4** to match the switch on the box.
+Two things the box will not tell you:
+
+- It scales whatever comes in to fill the 4:3 tube, so the Pi has to send a 4:3 picture or the channel arrives squashed.
+- Cheap ones send no EDID at all, so the Pi sees no screen, guesses a mode, and refuses to send HDMI audio.
+
+Fix both.
+Append to the single line in `/boot/firmware/cmdline.txt`:
+
+```
+video=HDMI-A-1:640x480@60D vc4.force_hotplug=1 drm.edid_firmware=HDMI-A-1:edid/cable82.bin
+```
+
+and give the Pi the EDID that file names, a 256-byte description of a 640x480 screen with stereo audio that ships in this repo:
+
+```
+sudo mkdir -p /lib/firmware/edid
+sudo cp edid/cable82-640x480-audio.bin /lib/firmware/edid/cable82.bin
+```
+
+The desktop picks its own resolution on top of the kernel's, so pin it in `~/.config/kanshi/config`:
+
+```
+profile crt {
+  output HDMI-A-1 mode 640x480 position 0,0
+}
+```
+
+Reboot, and `wpctl status` should now list an HDMI sink next to the headphone jack.
+Make it the default and give it some level; WirePlumber remembers:
+
+```
+wpctl status                       # find the "(HDMI)" sink's number
+wpctl set-default <number>
+wpctl set-volume <number> 0.8
+```
+
+The modulator puts the sound on the channel's audio carrier, mono, the way 1982 did.
+
+**Composite (Pi Zero, 1, 2, 3 via the yellow jack or the 3.5mm AV jack, Pi 4 via the AV jack; TV with an RCA input):**
+
+```
+sudo raspi-config nonint do_composite 0
+```
+
+writes `dtoverlay=vc4-kms-v3d,composite` to `config.txt`, and on every Pi before the 5 that also turns HDMI off: it is one or the other.
+The Wayland desktop does not trust the composite connector until it is told the mode, so append to `cmdline.txt`:
+
+```
+video=Composite-1:720x480@60ie,tv_mode=NTSC
+```
+
+(PAL: `720x576@50ie,tv_mode=PAL`.)
+Audio routes itself to the analog jack when HDMI is off.
+If the picture is wavy or rolling and the sound is fine, the 4-pole AV cable is wired the camcorder way: move the **red** plug to the TV's video input.
+The old `enable_tvout` / `sdtv_mode` / `sdtv_aspect` lines you will find in older guides do nothing on Bookworm or later.
+
+### 5. Tune it in the control room
+
+Open the **CRT** panel in the control room:
+
+- **CRT mode** swaps in a softer palette and drops the drop shadow.
+  Composite and RF smear saturated red and blue and clip pure white; this calms both.
+- **Text size** enlarges the body text, kicker, crawl, and the small header lines, 1 to 1.5.
+  1.25 is a good start on a small tube; the big clock stays as it is.
+- **Overscan safe margin**: raise it if the TV crops the edges.
+
+Pages fit themselves to whatever is left: a long fact or the weather card shrinks just enough, and the weather card gives up its sunrise line first.
 There are no fake scanline filters in CABLE 82: the CRT is the filter.
 
 ## Troubleshooting
@@ -183,6 +284,18 @@ The `192.168.1.42` in these docs is an example, not your Pi's address.
 
 **"raspberrypi.local" does not resolve** when the Pi's hostname is not `raspberrypi` (newer images let you choose), or when the browsing device lacks mDNS (older Windows, some Android).
 `hostname` on the Pi shows its name; the IP address works regardless.
+
+**The picture is there but the text is smeared or the colors bleed.**
+That is NTSC doing what it does to saturated color and small type.
+Turn on CRT mode and raise Text size in the control room's CRT panel, then fine-tune the TV; a 1980s tuner drifts, and cheap modulators sit slightly off the carrier.
+
+**No sound through the HDMI modulator.**
+The Pi refuses HDMI audio unless the screen's EDID says it can hear, and cheap modulators send no EDID.
+Step 4 above supplies one (`drm.edid_firmware=` plus the shipped `edid/cable82-640x480-audio.bin`); after a reboot `wpctl status` lists an HDMI sink.
+
+**It runs, slowly, and `vcgencmd get_throttled` is not `0x0`.**
+The power supply.
+A Pi 3 on a phone charger runs at 600MHz with under-voltage flags set; a 5V 2.5A supply and a short cable fix it.
 
 **The channel is up but feeds, weather, or CheerLights are blank.**
 The clock, messages, facts, and jokes never need the network; the rest is fetched by the server.
