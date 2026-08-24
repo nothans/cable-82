@@ -8,7 +8,9 @@ It turns any screen - ideally an old 4:3 CRT fed by a Raspberry Pi - into a scro
 
 You make the channel yours in a control room at `/config` - or by editing one plain `config.json` file.
 
-Read the [build story on nothans.com](https://nothans.com/cable-82-turn-a-raspberry-pi-and-an-old-crt-into-a-1982-cable-bulletin-board-channel), watch the [one-minute video of it on the air](https://www.youtube.com/watch?v=d5Jcfx5oN0A), or leave the [full six-minute demo](https://www.youtube.com/watch?v=0YEvI_oFfqY) playing.
+![CABLE 82 on the air: a Raspberry Pi 3 B+, an RF modulator, and a 1987 Magnavox tuned to channel 3](images/cable-82-on-a-1987-magnavox.jpg)
+
+Read the [build story on nothans.com](https://nothans.com/cable-82-turn-a-raspberry-pi-and-an-old-crt-into-a-1982-cable-bulletin-board-channel), follow the [step-by-step build tutorial](https://nothans.com/cable-82-tv-channel-build-tutorial-rasbperry-pi-3-b-and-old-crt-tv) from a blank SD card to channel 3, watch the [one-minute video of it on the air](https://www.youtube.com/watch?v=d5Jcfx5oN0A), or leave the [full six-minute demo](https://www.youtube.com/watch?v=0YEvI_oFfqY) playing.
 
 Weather is one optional strip - current conditions, hi/lo, and sunrise/sunset - fed by Open-Meteo (free, no account). For a full retro weather *channel*, [ws4kp](https://github.com/netbymatt/ws4kp) does that beautifully.
 
@@ -94,7 +96,7 @@ If the network dies entirely, the clock, messages, and facts keep going forever.
 
 ## Running it on a real CRT (Raspberry Pi)
 
-Everything below was run end to end on a Raspberry Pi 3 Model B+ with Raspberry Pi OS (64-bit) "Trixie" and a 1987 Magnavox portable over an HDMI-to-RF modulator on channel 3.
+Everything below was run end to end on a Raspberry Pi 3 Model B+ with Raspberry Pi OS (64-bit) "Trixie" and a 1987 Magnavox portable over an HDMI-to-RF modulator on channel 3; the [build tutorial](https://nothans.com/cable-82-tv-channel-build-tutorial-rasbperry-pi-3-b-and-old-crt-tv) walks the same ground with photos.
 Newer Pis are easier; the notes say where an older one differs.
 
 ### Node.js on a Raspberry Pi
