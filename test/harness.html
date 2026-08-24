@@ -140,7 +140,10 @@
     ok(r.ok);
     eq(r.cfg.pageSeconds, 12);
     eq(r.cfg.overscanPercent, 7);
+    eq(r.cfg.overscanX, 7);
+    eq(r.cfg.overscanY, 7);
     eq(r.cfg.crtMode, false);
+    eq(r.cfg.crtInkText, false);
     eq(r.cfg.textScale, 1);
     eq(r.cfg.colors.pageCycle, ["blue", "green", "red", "cyan"]);
     ok(r.cfg.rotation.length >= 1);
@@ -154,6 +157,14 @@
     eq(r.cfg.overscanPercent, 15);
     eq(r.cfg.rotation, [{ type: "clock" }]);
     ok(r.errors.length === 2, "two warnings");
+  });
+  t("per-axis overscan falls back to overscanPercent and clamps", () => {
+    const r = C.validateConfig({ overscanPercent: 9 });
+    eq(r.cfg.overscanX, 9);
+    eq(r.cfg.overscanY, 9);
+    const r2 = C.validateConfig({ overscanPercent: 9, overscanX: 12, overscanY: 40 });
+    eq(r2.cfg.overscanX, 12);
+    eq(r2.cfg.overscanY, 15);
   });
   t("validateConfig clamps textScale and only honors a true crtMode", () => {
     eq(C.validateConfig({ textScale: 3 }).cfg.textScale, 1.5);

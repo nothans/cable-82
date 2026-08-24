@@ -245,10 +245,17 @@
     stage.classList.toggle("crt", cfg.crtMode);
     stage.style.setProperty("--ts", String(cfg.textScale));
     stage.style.setProperty("--ovp", String(cfg.overscanPercent));
+    stage.style.setProperty("--ovpx", String(cfg.overscanX));
+    stage.style.setProperty("--ovpy", String(cfg.overscanY));
     stage.style.setProperty("--header-bg", resolveColor(cfg.colors.headerBg, "blue", pal));
-    stage.style.setProperty("--crawl-bg", resolveColor(cfg.colors.crawlBg, "ink", pal));
+    // CRT mode pins the crawl to a dark blue band with light text no matter
+    // what the config says. Dark blue, not neutral ink: on a real tube any
+    // chroma bleed from the red flag lands on a neutral band as a green cast,
+    // while on a blue band it just reads as more blue. 1982 knew this too.
+    const crawlBg = cfg.crtMode ? "#182858" : cfg.colors.crawlBg;
+    stage.style.setProperty("--crawl-bg", resolveColor(crawlBg, "ink", pal));
     el.header.style.color = textColorFor(cfg.colors.headerBg, pal);
-    el.crawlBand.style.color = textColorFor(cfg.colors.crawlBg, pal);
+    el.crawlBand.style.color = textColorFor(crawlBg, pal);
     // The station bug inverts against the header band.
     stage.style.setProperty("--bug-bg", textColorFor(cfg.colors.headerBg, pal));
     stage.style.setProperty("--bug-fg", resolveColor(cfg.colors.headerBg, "blue", pal));
@@ -419,7 +426,12 @@
     function paintPage(colorName) {
       const bgName = colorName && (PALETTE[colorName] || /^#/.test(colorName)) ? colorName : nextCycleColor();
       el.page.style.background = resolveColor(bgName, "blue", pal);
-      el.page.style.color = textColorFor(bgName, pal);
+      // On some tubes white page text smears; crtInkText trades it for ink.
+      // Only swap where the pairing was white-on-color, so ink never lands
+      // on an ink or otherwise dark background.
+      let pageText = textColorFor(bgName, pal);
+      if (cfg.crtMode && cfg.crtInkText && pageText === pal.white) pageText = pal.ink;
+      el.page.style.color = pageText;
     }
 
     // Shrink the page content (never the kicker) just enough to fit the page

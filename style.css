@@ -54,8 +54,8 @@ html, body { height: 100%; background: var(--letterbox); }
   --ts: 1;
   /* Overscan safe margins. --ovp is set from config (percent, 0-15). */
   --ovp: 7;
-  --ovx: calc(var(--u) * 640 * var(--ovp) / 100);
-  --ovy: calc(var(--u) * 480 * var(--ovp) / 100);
+  --ovx: calc(var(--u) * 640 * var(--ovpx, var(--ovp)) / 100);
+  --ovy: calc(var(--u) * 480 * var(--ovpy, var(--ovp)) / 100);
   /* Hard offset drop shadow, the way character generators did it: solid,
      no blur, down-and-right. --shadow can be overridden from config. */
   --shadow: rgba(8, 8, 16, 0.7);
@@ -211,7 +211,9 @@ html, body { height: 100%; background: var(--letterbox); }
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  padding: calc(var(--u) * 10) calc(var(--u) * 18);
+  /* The red runs to the raw left edge; the label starts inside the safe
+     area, so a tube that eats the edge eats solid color, not letters. */
+  padding: calc(var(--u) * 10) calc(var(--u) * 18) calc(var(--u) * 10) calc(var(--u) * 18 + var(--ovx));
   background: var(--flag-bg);
   color: var(--flag-fg);
   font-size: calc(var(--u) * 26 * var(--ts));

@@ -82,8 +82,10 @@ The keys:
 | `music` | Background music from the `music/` folder: `enabled`, `shuffle`, `volume` (0-100) | on, shuffled, 60 |
 | `cheerlights` | The latest [CheerLights](https://cheerlights.com) color as a crawl item: `enabled`, `template` (`{color}` becomes the color name) | on, `THE WORLD IS SET TO {COLOR}` |
 | `colors` | `pageCycle`, `headerBg`, `crawlBg` | period palette |
-| `overscanPercent` | Safe margin for CRT overscan, 0-15 | `7` |
+| `overscanPercent` | Safe margin for CRT overscan, 0-15; the fallback for both axes | `7` |
+| `overscanX`, `overscanY` | Per-axis overscan margins, 0-15; tubes rarely crop evenly | `overscanPercent` |
 | `crtMode` | Softer NTSC-safe palette and no drop shadow, for composite or RF | `false` |
+| `crtInkText` | Dark text on color pages while CRT mode is on; white smears on some tubes | `false` |
 | `textScale` | Enlarges body, kicker, crawl, and small header text, 1-1.5 | `1` |
 | `dailyReloadHour` | Daily kiosk self-reload hour, or `false` | `4` |
 
@@ -259,7 +261,8 @@ Open the **CRT** panel in the control room:
   Composite and RF smear saturated red and blue and clip pure white; this calms both.
 - **Text size** enlarges the body text, kicker, crawl, and the small header lines, 1 to 1.5.
   1.25 is a good start on a small tube; the big clock stays as it is.
-- **Overscan safe margin**: raise it if the TV crops the edges.
+- **Dark text on color pages** trades the white page text for ink; white smears on some tubes, and the only way to know yours is to flip it and look.
+- **Overscan margins**, now one per axis: tubes rarely crop evenly, so give the sides and the top/bottom each what your set eats.
 
 Pages fit themselves to whatever is left: a long fact or the weather card shrinks just enough, and the weather card gives up its sunrise line first.
 There are no fake scanline filters in CABLE 82: the CRT is the filter.

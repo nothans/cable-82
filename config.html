@@ -379,6 +379,8 @@
           <label>Picture</label>
           <div class="toggle"><input type="checkbox" id="f-crtMode"><label for="f-crtMode">CRT mode: softer colors, no drop shadow</label></div>
           <span class="note">Composite and RF smear saturated red and blue and clip pure white. This calms both.</span>
+          <div class="toggle"><input type="checkbox" id="f-crtInkText"><label for="f-crtInkText">Dark text on color pages</label></div>
+          <span class="note">White text smears on some tubes. This only applies while CRT mode is on.</span>
         </div>
         <div class="field">
           <label for="f-textScale">Text size</label>
@@ -386,9 +388,14 @@
           <span class="note">1 is the original layout. Try 1.25 on a small tube; the big clock stays as it is.</span>
         </div>
         <div class="field">
-          <label for="f-overscanPercent">Overscan safe margin (%)</label>
-          <input type="number" id="f-overscanPercent" min="0" max="15" step="1">
-          <span class="note">Raise it if your TV crops the edges.</span>
+          <label for="f-overscanX">Overscan margin, sides (%)</label>
+          <input type="number" id="f-overscanX" min="0" max="15" step="1">
+          <span class="note">Raise it if your TV crops the left or right edge.</span>
+        </div>
+        <div class="field">
+          <label for="f-overscanY">Overscan margin, top and bottom (%)</label>
+          <input type="number" id="f-overscanY" min="0" max="15" step="1">
+          <span class="note">Tubes rarely crop evenly; set each axis to what yours eats.</span>
         </div>
       </div>
     </section>

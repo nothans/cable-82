@@ -265,8 +265,10 @@
     $("f-pageSeconds").value = cfg.pageSeconds;
     $("f-refreshMinutes").value = cfg.refreshMinutes;
     $("f-maxItemsPerFeed").value = cfg.maxItemsPerFeed;
-    $("f-overscanPercent").value = cfg.overscanPercent;
+    $("f-overscanX").value = cfg.overscanX != null ? cfg.overscanX : cfg.overscanPercent;
+    $("f-overscanY").value = cfg.overscanY != null ? cfg.overscanY : cfg.overscanPercent;
     $("f-crtMode").checked = cfg.crtMode === true;
+    $("f-crtInkText").checked = cfg.crtInkText === true;
     $("f-textScale").value = cfg.textScale != null ? cfg.textScale : 1;
     fillReloadSelect(cfg.dailyReloadHour);
 
@@ -472,8 +474,10 @@
       pageSeconds: numVal("f-pageSeconds"),
       refreshMinutes: numVal("f-refreshMinutes"),
       maxItemsPerFeed: numVal("f-maxItemsPerFeed"),
-      overscanPercent: numVal("f-overscanPercent"),
+      overscanX: numVal("f-overscanX"),
+      overscanY: numVal("f-overscanY"),
       crtMode: $("f-crtMode").checked,
+      crtInkText: $("f-crtInkText").checked,
       textScale: numVal("f-textScale"),
       dailyReloadHour: reload === "off" ? false : Number(reload),
       facts: linesToArray($("f-facts").value),

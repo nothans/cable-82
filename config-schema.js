@@ -188,9 +188,15 @@
       crawlBg: "ink",
     },
     overscanPercent: 7,
+    // Per-axis overscan margins; both fall back to overscanPercent, because
+    // real tubes rarely crop the same amount on every edge.
+    overscanX: 7,
+    overscanY: 7,
     // CRT mode: softer palette, no drop shadow. textScale enlarges the body,
     // kicker, crawl, and small header lines (1 = the original layout).
+    // crtInkText swaps white page text for ink; white smears on some tubes.
     crtMode: false,
+    crtInkText: false,
     textScale: 1,
     dailyReloadHour: 4,
   };
@@ -293,7 +299,10 @@
     cfg.refreshMinutes = clampNum(raw.refreshMinutes, 1, 1440, 10);
     cfg.maxItemsPerFeed = Math.round(clampNum(raw.maxItemsPerFeed, 1, 100, 20));
     cfg.overscanPercent = clampNum(raw.overscanPercent, 0, 15, 7);
+    cfg.overscanX = clampNum(raw.overscanX, 0, 15, cfg.overscanPercent);
+    cfg.overscanY = clampNum(raw.overscanY, 0, 15, cfg.overscanPercent);
     cfg.crtMode = raw.crtMode === true;
+    cfg.crtInkText = raw.crtInkText === true;
     cfg.textScale = clampNum(raw.textScale, 1, 1.5, 1);
     cfg.dailyReloadHour =
       raw.dailyReloadHour === false || raw.dailyReloadHour === null
