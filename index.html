@@ -44,6 +44,27 @@
       <div id="error-sub">WE ARE EXPERIENCING TECHNICAL DIFFICULTIES</div>
       <div id="error-detail"></div>
     </div>
+    <!-- The dial. index.html is the tuner: these layers cover the bulletin
+         board when another channel is showing. One page, forever - a channel
+         change is a DOM operation, never a navigation. -->
+    <div id="video-layer" hidden>
+      <!-- Two buffers: one on the air, one cueing the next program, so a
+           file boundary is a cut instead of a load. -->
+      <video playsinline></video>
+      <video playsinline hidden></video>
+    </div>
+    <div id="card-layer" hidden>
+      <div id="card-bars"></div>
+      <div id="card-clock">--:--</div>
+      <div id="card-name"></div>
+      <div id="card-msg"></div>
+    </div>
+    <div id="external-layer" hidden></div>
+    <canvas id="tuner-snow" width="160" height="120" hidden></canvas>
+    <div id="channel-bug" hidden>
+      <div id="bug-number"></div>
+      <div id="bug-name"></div>
+    </div>
   </div>
 </div>
 <script src="config-schema.js"></script>

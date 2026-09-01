@@ -95,9 +95,20 @@ before(async () => {
   for (const f of ["b-track.ogg", "a-track.mp3", "c-track.wav", "notes.txt", "cover.png"]) {
     fs.writeFileSync(path.join(musicDir, f), "x");
   }
+  const channelsDir = path.join(tmpDir, "channels");
+  fs.mkdirSync(path.join(channelsDir, "cartoons"), { recursive: true });
+  for (const f of ["S01.E1.mp4", "S01.E10.mp4", "S01.E2.mp4", "notes.txt"]) {
+    fs.writeFileSync(path.join(channelsDir, "cartoons", f), "x");
+  }
+  fs.writeFileSync(
+    path.join(channelsDir, "cartoons", ".durations.json"),
+    JSON.stringify({ "S01.E1.mp4": 31.2 })
+  );
+  fs.mkdirSync(path.join(channelsDir, "empty"));
   app = createApp({
     configPath,
     musicDir,
+    channelsDir,
     upstreamTimeoutMs: 400,
     maxFeedBytes: 64 * 1024,
     weatherApiBase: `http://127.0.0.1:${upstreamPort}/wx`,
@@ -403,4 +414,193 @@ test("listenUrls leads with localhost and lists every LAN IPv4 address", () => {
     .map((a) => "http://" + a.address + ":1982");
   assert.deepEqual(urls.slice(1), lan);
   for (const u of urls) assert.equal(new URL(u).port, "1982");
+});
+
+// ---------- channels, the dial, and the tuner bus ----------
+
+test("GET /api/config synthesizes a one-channel dial for a legacy config", async () => {
+  const r = await fetch(base + "/api/config");
+  const j = await r.json();
+  assert.equal(j.config.channels.length, 1);
+  assert.equal(j.config.channels[0].number, 82);
+  assert.equal(j.config.channels[0].type, "bulletin");
+  assert.equal(j.config.tuner.wrap, true);
+});
+
+test("schema rejects duplicate channel numbers and sorts the dial", async () => {
+  const { validateConfig } = require("../config-schema.js");
+  const r = validateConfig({
+    channels: [
+      { number: 90, type: "video", folder: "cartoons" },
+      { number: 82, type: "bulletin" },
+      { number: 90, type: "video", folder: "cartoons" },
+    ],
+  });
+  assert.equal(r.cfg.channels.length, 2);
+  assert.deepEqual(r.cfg.channels.map((c) => c.number), [82, 90]);
+  assert.ok(r.errors.some((e) => e.includes("DUPLICATE CHANNEL NUMBER")));
+});
+
+test("schema drops traversal folders and urlless externals", async () => {
+  const { validateConfig } = require("../config-schema.js");
+  const r = validateConfig({
+    channels: [
+      { number: 5, type: "video", folder: "../secrets" },
+      { number: 6, type: "external", url: "ftp://nope" },
+      { number: 7, type: "bulletin" },
+    ],
+  });
+  assert.deepEqual(r.cfg.channels.map((c) => c.number), [7]);
+});
+
+test("GET /api/channels lists folders and naturally sorts playlists", async () => {
+  writeConfig(
+    Object.assign(configFor(upstream.address().port), {
+      channels: [
+        { number: 82, type: "bulletin" },
+        { number: 90, type: "video", folder: "cartoons" },
+      ],
+    }),
+    2
+  );
+  const r = await fetch(base + "/api/channels");
+  const j = await r.json();
+  const cartoons = j.folders.find((f) => f.folder === "cartoons");
+  assert.equal(cartoons.files, 3); // notes.txt and .durations.json excluded
+  const ch = j.channels.find((c) => c.number === 90);
+  assert.deepEqual(ch.files.map((f) => f.file), ["S01.E1.mp4", "S01.E2.mp4", "S01.E10.mp4"]);
+  assert.equal(ch.files[0].duration, 31.2); // cached
+  assert.equal(ch.files[1].duration, null); // not probed yet
+});
+
+test("POST /api/channels/durations records only real files, guarded", async () => {
+  const noHeader = await fetch(base + "/api/channels/durations", {
+    method: "POST",
+    body: JSON.stringify({ folder: "cartoons", durations: { "S01.E2.mp4": 12 } }),
+  });
+  assert.equal(noHeader.status, 403);
+  const r = await fetch(base + "/api/channels/durations", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-cable82-config": "1" },
+    body: JSON.stringify({ folder: "cartoons", durations: { "S01.E2.mp4": 29.9, "ghost.mp4": 10, "S01.E10.mp4": -5 } }),
+  });
+  const j = await r.json();
+  assert.equal(j.ok, true);
+  assert.equal(j.wrote, 1);
+  const again = await (await fetch(base + "/api/channels")).json();
+  const ch = again.channels.find((c) => c.number === 90);
+  assert.equal(ch.files.find((f) => f.file === "S01.E2.mp4").duration, 29.9);
+});
+
+test("POST /api/tune broadcasts an event with a rising sequence to SSE listeners", async () => {
+  // open an SSE listener
+  const events = [];
+  const es = await new Promise((resolve, reject) => {
+    const req = http.get(base + "/api/events", (res) => {
+      let buf = "";
+      res.on("data", (c) => {
+        buf += c;
+        let idx;
+        while ((idx = buf.indexOf("\n\n")) >= 0) {
+          const chunk = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          const ev = /event: (\S+)/.exec(chunk);
+          const data = /data: (.*)/.exec(chunk);
+          if (ev && data) events.push({ event: ev[1], data: JSON.parse(data[1]) });
+        }
+      });
+      resolve({ req, res });
+    });
+    req.on("error", reject);
+  });
+  await new Promise((r) => setTimeout(r, 100));
+  const t1 = await (await fetch(base + "/api/tune", { method: "POST", body: JSON.stringify({ cmd: "up" }) })).json();
+  const t2 = await (await fetch(base + "/api/tune", { method: "POST", body: JSON.stringify({ cmd: "set", channel: 90 }) })).json();
+  assert.ok(t2.seq > t1.seq);
+  await new Promise((r) => setTimeout(r, 150));
+  es.req.destroy();
+  const tunes = events.filter((e) => e.event === "tune");
+  assert.equal(tunes.length, 2);
+  assert.equal(tunes[0].data.cmd, "up");
+  assert.deepEqual(tunes[1].data, { seq: t2.seq, cmd: "set", channel: 90 });
+  assert.ok(events.some((e) => e.event === "hello"));
+});
+
+test("POST /api/tune validates commands", async () => {
+  const bad = await fetch(base + "/api/tune", { method: "POST", body: JSON.stringify({ cmd: "explode" }) });
+  assert.equal(bad.status, 400);
+  const noChannel = await fetch(base + "/api/tune", { method: "POST", body: JSON.stringify({ cmd: "set" }) });
+  assert.equal(noChannel.status, 400);
+});
+
+test("static serving honors Range requests (how video seeks)", async () => {
+  const whole = await fetch(base + "/README.md");
+  assert.equal(whole.status, 200);
+  assert.equal(whole.headers.get("accept-ranges"), "bytes");
+  const text = await whole.text();
+  const part = await fetch(base + "/README.md", { headers: { range: "bytes=2-5" } });
+  assert.equal(part.status, 206);
+  assert.equal(part.headers.get("content-range"), "bytes 2-5/" + text.length);
+  assert.equal(await part.text(), text.slice(2, 6));
+  const off = await fetch(base + "/README.md", { headers: { range: "bytes=999999999-" } });
+  assert.equal(off.status, 416);
+});
+
+test("naturalCompare orders seasons and episodes like a human", () => {
+  const { naturalCompare } = require("../server.js");
+  const names = ["S01.E10.mp4", "S02.E1.mp4", "S01.E2.mp4", "S01.E1.mp4"];
+  assert.deepEqual(names.sort(naturalCompare), ["S01.E1.mp4", "S01.E2.mp4", "S01.E10.mp4", "S02.E1.mp4"]);
+});
+
+test("naturalCompare survives mixed zero-padding (S1E2 airs before S01E10)", () => {
+  const { naturalCompare } = require("../server.js");
+  assert.ok(naturalCompare("S1E2.mp4", "S01E10.mp4") < 0);
+  assert.deepEqual(
+    ["S01E10.mp4", "S1E2.mp4", "S1E1.mp4"].sort(naturalCompare),
+    ["S1E1.mp4", "S1E2.mp4", "S01E10.mp4"]
+  );
+  // Only-padding differences still order deterministically.
+  assert.ok(naturalCompare("S1E2.mp4", "S01E2.mp4") !== 0);
+});
+
+test("/api/tune answers 403 while HTTP tuning is switched off", async () => {
+  const upstreamPort = upstream.address().port;
+  writeConfig({ ...configFor(upstreamPort), tuner: { sources: { http: false } } }, 2);
+  const get = await fetch(base + "/api/tune");
+  assert.equal(get.status, 403);
+  const post = await fetch(base + "/api/tune", { method: "POST", body: JSON.stringify({ cmd: "up" }) });
+  assert.equal(post.status, 403);
+  writeConfig(configFor(upstreamPort), 4);
+  const back = await fetch(base + "/api/tune");
+  assert.equal(back.status, 200);
+});
+
+test("405 responses carry an Allow header", async () => {
+  const r = await fetch(base + "/api/tune", { method: "DELETE" });
+  assert.equal(r.status, 405);
+  assert.equal(r.headers.get("allow"), "GET, POST");
+  const d = await fetch(base + "/api/channels/durations");
+  assert.equal(d.status, 405);
+  assert.equal(d.headers.get("allow"), "POST");
+});
+
+test("schema accepts an overnight window and skips channel number 0", async () => {
+  const upstreamPort = upstream.address().port;
+  writeConfig({
+    ...configFor(upstreamPort),
+    channels: [
+      { number: 82, type: "bulletin" },
+      { number: 0, type: "video", folder: "cartoons" },
+      { number: 9, type: "video", folder: "cartoons", mode: "schedule",
+        schedule: [{ days: ["sat"], start: "20:00", end: "01:00" }] },
+    ],
+  }, 6);
+  const j = await (await fetch(base + "/api/config")).json();
+  const nums = j.config.channels.map((c) => c.number);
+  assert.deepEqual(nums, [9, 82]); // number 0 skipped, never clamped to 1
+  const nine = j.config.channels[0];
+  assert.equal(nine.schedule.length, 1);
+  assert.equal(nine.schedule[0].start, "20:00");
+  assert.equal(nine.schedule[0].end, "01:00"); // overnight window kept as written
+  writeConfig(configFor(upstreamPort), 8);
 });

@@ -236,6 +236,172 @@
     eq(src.join(""), "abcde");
   });
 
+  // ---------------- the dial math
+
+  t("naturalCompare orders seasons and episodes like a human", () => {
+    const names = ["S01.E10.mp4", "S02.E1.mp4", "S01.E2.mp4", "S01.E1.mp4"];
+    eq(names.sort(C.naturalCompare), ["S01.E1.mp4", "S01.E2.mp4", "S01.E10.mp4", "S02.E1.mp4"]);
+  });
+
+  t("positionAt joins the broadcast mid-program from the wall clock", () => {
+    const pl = [{ duration: 30 }, { duration: 60 }, { duration: 10 }];
+    const epoch = 0;
+    eq(C.positionAt(pl, 0, epoch), { index: 0, offset: 0 });
+    eq(C.positionAt(pl, 45 * 1000, epoch), { index: 1, offset: 15 });
+    eq(C.positionAt(pl, 95 * 1000, epoch), { index: 2, offset: 5 });
+    // wraps the loop: 100s total, so 130s in is 30s in = start of file 1
+    eq(C.positionAt(pl, 130 * 1000, epoch), { index: 1, offset: 0 });
+    // a full week later it still resolves (no drift accumulation by design)
+    const week = 7 * 24 * 3600 * 1000;
+    const p = C.positionAt(pl, week + 45 * 1000, epoch);
+    eq(p.index, 1);
+    ok(Math.abs(p.offset - 15) < 0.001, "offset stable across a week");
+  });
+
+  t("positionAt refuses unknown durations (degraded mode's trigger)", () => {
+    eq(C.positionAt([{ duration: 30 }, { duration: null }], 1000, 0), null);
+    eq(C.positionAt([], 1000, 0), null);
+  });
+
+  t("seededShuffle is stable for a seed and different across seeds", () => {
+    const src = ["a", "b", "c", "d", "e", "f", "g"];
+    const one = C.seededShuffle(src, "2026-8-31#90");
+    const two = C.seededShuffle(src, "2026-8-31#90");
+    const other = C.seededShuffle(src, "2026-9-1#90");
+    eq(one, two);
+    eq([...one].sort().join(""), "abcdefg");
+    ok(one.join("") !== other.join(""), "different day, different order");
+    eq(src.join(""), "abcdefg");
+  });
+
+  t("airState: continuous channels are always on the air", () => {
+    eq(C.airState({ mode: "continuous" }, new Date()).onAir, true);
+  });
+
+  t("airState: saturday morning is on saturday morning", () => {
+    const ch = { mode: "schedule", schedule: [{ days: ["sat"], start: "08:00", end: "11:30" }] };
+    // Sat Aug 29 2026 is a Saturday
+    const sat9 = new Date(2026, 7, 29, 9, 0, 0);
+    const s = C.airState(ch, sat9);
+    eq(s.onAir, true);
+    eq(new Date(s.untilMs).getHours(), 11);
+    eq(new Date(s.untilMs).getMinutes(), 30);
+  });
+
+  t("airState: boundaries are half-open (on at 08:00, off at 11:30)", () => {
+    const ch = { mode: "schedule", schedule: [{ days: ["sat"], start: "08:00", end: "11:30" }] };
+    eq(C.airState(ch, new Date(2026, 7, 29, 7, 59, 59)).onAir, false);
+    eq(C.airState(ch, new Date(2026, 7, 29, 8, 0, 0)).onAir, true);
+    eq(C.airState(ch, new Date(2026, 7, 29, 11, 29, 59)).onAir, true);
+    eq(C.airState(ch, new Date(2026, 7, 29, 11, 30, 0)).onAir, false);
+  });
+
+  t("airState: a tuesday afternoon names when programming resumes", () => {
+    const ch = { mode: "schedule", schedule: [{ days: ["sat"], start: "08:00", end: "11:30" }] };
+    const tue = new Date(2026, 8, 1, 14, 0, 0); // Tue Sep 1 2026
+    const s = C.airState(ch, tue);
+    eq(s.onAir, false);
+    eq(s.resumeText, "PROGRAMMING RESUMES SATURDAY 8:00 AM");
+    eq(new Date(s.untilMs).getDay(), 6);
+    eq(new Date(s.untilMs).getHours(), 8);
+  });
+
+  t("airState: a window later today says TODAY", () => {
+    const ch = { mode: "schedule", schedule: [{ days: ["sat"], start: "08:00", end: "11:30" }] };
+    const satEarly = new Date(2026, 7, 29, 6, 0, 0);
+    eq(C.airState(ch, satEarly).resumeText, "PROGRAMMING RESUMES TODAY 8:00 AM");
+  });
+
+  t("airState: no valid windows is honestly never on the air", () => {
+    const s = C.airState({ mode: "schedule", schedule: [] }, new Date());
+    eq(s.onAir, false);
+    eq(s.resumeText, "NO PROGRAMMING SCHEDULED");
+    eq(s.untilMs, null);
+  });
+
+  t("nextChannelIndex wraps or clamps by config", () => {
+    const dial = [{ number: 82 }, { number: 90 }, { number: 91 }];
+    eq(C.nextChannelIndex(dial, 2, +1, true), 0);
+    eq(C.nextChannelIndex(dial, 2, +1, false), 2);
+    eq(C.nextChannelIndex(dial, 0, -1, true), 2);
+    eq(C.nextChannelIndex(dial, 0, -1, false), 0);
+    eq(C.nextChannelIndex(dial, 0, +1, true), 1);
+    eq(C.nextChannelIndex([{ number: 82 }], 0, +1, true), 0);
+  });
+
+  t("validateConfig synthesizes the one-channel dial and the tuner", () => {
+    const cfg = C.validateConfig({}).cfg;
+    eq(cfg.channels.length, 1);
+    eq(cfg.channels[0].number, 82);
+    eq(cfg.channels[0].type, "bulletin");
+    eq(cfg.tuner.sources.keyboard, true);
+    eq(cfg.tuner.wrap, true);
+  });
+
+  t("validateConfig keeps a valid video channel and its schedule", () => {
+    const cfg = C.validateConfig({
+      channels: [
+        { number: 82, type: "bulletin" },
+        { number: 90, type: "video", folder: "cartoons", mode: "schedule", order: "shuffle-daily", offAir: "bars",
+          schedule: [{ days: ["sat", "sun"], start: "08:00", end: "11:30" }, { days: [], start: "1:00", end: "2:00" }] },
+      ],
+    }).cfg;
+    const ch = cfg.channels.find((c) => c.number === 90);
+    eq(ch.folder, "cartoons");
+    eq(ch.mode, "schedule");
+    eq(ch.order, "shuffle-daily");
+    eq(ch.offAir, "bars");
+    eq(ch.schedule.length, 1); // the dayless window is dropped
+    eq(ch.schedule[0].days, ["sat", "sun"]);
+  });
+
+  t("naturalCompare survives mixed zero-padding", () => {
+    ok(C.naturalCompare("S1E2.mp4", "S01E10.mp4") < 0, "S1E2 before S01E10");
+    eq(["S01E10", "S1E2", "S1E1"].sort(C.naturalCompare), ["S1E1", "S1E2", "S01E10"]);
+    ok(C.naturalCompare("S1E2", "S01E2") !== 0, "padding-only difference still deterministic");
+  });
+
+  t("windowSegments expands overnight windows and keeps normal ones whole", () => {
+    const S = window.Cable82Schema;
+    eq(S.windowSegments({ days: ["sat"], start: "08:00", end: "11:30" }),
+      [{ day: 6, start: 480, end: 690 }]);
+    eq(S.windowSegments({ days: ["sat"], start: "20:00", end: "01:00" }),
+      [{ day: 6, start: 1200, end: 1440 }, { day: 0, start: 0, end: 60, cont: true }]);
+    // "until midnight" both ways: an explicit 24:00 and a wrap to 00:00
+    eq(S.windowSegments({ days: ["fri"], start: "20:00", end: "24:00" }),
+      [{ day: 5, start: 1200, end: 1440 }]);
+    eq(S.windowSegments({ days: ["fri"], start: "20:00", end: "00:00" }),
+      [{ day: 5, start: 1200, end: 1440 }]);
+  });
+
+  t("airState: an overnight window is on the air across midnight", () => {
+    const ch = { mode: "schedule", schedule: [{ days: ["sat"], start: "20:00", end: "01:00" }] };
+    // Sat Aug 29 2026 23:30 - the evening half
+    const sat2330 = new Date(2026, 7, 29, 23, 30, 0);
+    eq(C.airState(ch, sat2330).onAir, true);
+    // Sun Aug 30 2026 00:30 - the morning half
+    const sun0030 = new Date(2026, 7, 30, 0, 30, 0);
+    eq(C.airState(ch, sun0030).onAir, true);
+    // Sun 01:00 - half-open end
+    eq(C.airState(ch, new Date(2026, 7, 30, 1, 0, 0)).onAir, false);
+    // Sun 02:00 - resumes the following Saturday evening, not "sunday 12:00 AM"
+    const s = C.airState(ch, new Date(2026, 7, 30, 2, 0, 0));
+    eq(s.onAir, false);
+    eq(s.resumeText, "PROGRAMMING RESUMES SATURDAY 8:00 PM");
+  });
+
+  t("validateConfig keeps an overnight window and skips channel number 0", () => {
+    const cfg = C.validateConfig({
+      channels: [
+        { number: 0, type: "video", folder: "cartoons" },
+        { number: 9, type: "video", folder: "cartoons", mode: "schedule",
+          schedule: [{ days: ["sat"], start: "20:00", end: "01:00" }] },
+      ],
+    }).cfg;
+    eq(cfg.channels.map((c) => c.number), [9]); // 0 skipped, never clamped to 1
+    eq(cfg.channels[0].schedule, [{ days: ["sat"], start: "20:00", end: "01:00" }]);
+  });
+
   const summary = document.getElementById("summary");
   summary.textContent = pass + " passed, " + fail + " failed";
   summary.className = fail ? "bad" : "ok";

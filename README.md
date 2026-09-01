@@ -1,22 +1,27 @@
 # CABLE 82
 
-Your own 1982 cable community bulletin board channel.
+Your own cable network. You set the programming.
 
-Before feeds, your town had a channel: blue screens, chunky text, the time and temperature, the church bake sale, headlines crawling along the bottom.
-CABLE 82 recreates that channel and points it at your life.
-It turns any screen - ideally an old 4:3 CRT fed by a Raspberry Pi - into a scrolling rotation of the date and time, your community messages, fun facts, dad jokes, and live headlines from feeds you choose.
+Before streaming, cable TV delivered programming over channels: a dial full of them, each one on the air whether you were watching or not.
+CABLE 82 lets you run your own cable network.
 
-You make the channel yours in a control room at `/config` - or by editing one plain `config.json` file.
+![CABLE 82, new channels: the Magnavox mid-commercial on CH 2 with an Atari joystick as the channel changer](images/cable-82-new-channels.jpg)
 
-![CABLE 82 on the air: a Raspberry Pi 3 B+, an RF modulator, and a 1987 Magnavox tuned to channel 3](images/cable-82-on-a-1987-magnavox.jpg)
+Features:
 
-Read the [build story on nothans.com](https://nothans.com/cable-82-turn-a-raspberry-pi-and-an-old-crt-into-a-1982-cable-bulletin-board-channel), follow the [step-by-step build tutorial](https://nothans.com/cable-82-tv-channel-build-tutorial-rasbperry-pi-3-b-and-old-crt-tv) from a blank SD card to channel 3, watch the [one-minute video of it on the air](https://www.youtube.com/watch?v=d5Jcfx5oN0A), or leave the [full six-minute demo](https://www.youtube.com/watch?v=0YEvI_oFfqY) playing.
+- **Community Bulletin Board** - bundled as channel 82: your RSS feeds, news, weather, and local events.
+- **Video channels** - place videos in a folder to define your own channel, like a Saturday-morning cartoon lineup or old 50s movies.
+- **External channels** - point a channel at a website to create a channel out of anything.
+- **Flexible tuning** - anything that can trigger a key press, a button press, a GPIO pin, or an HTTP request to the API can change the channel.
+- **Control Room** (`/config`) - where you tune CABLE 82 to be what you want; fully customizable and extendable, everything stored in one `config.json` file.
+- **Made for CRTs** - 4:3 formatting, per-axis overscan margins, and a broadcast-safe palette.
 
-Weather is one optional strip - current conditions, hi/lo, and sunrise/sunset - fed by Open-Meteo (free, no account). For a full retro weather *channel*, [ws4kp](https://github.com/netbymatt/ws4kp) does that beautifully.
+Resources:
 
-| The time | The weather | A dad joke |
-| :---: | :---: | :---: |
-| ![The clock page: big time and date on a blue screen](images/clock.png) | ![The weather page: current conditions, hi/lo, and sunrise/sunset](images/weather.png) | ![A dad joke page](images/dad-joke.png) |
+- Original build story: [CABLE 82 on nothans.com](https://nothans.com/cable-82-turn-a-raspberry-pi-and-an-old-crt-into-a-1982-cable-bulletin-board-channel)
+- Step-by-step build tutorial: [from a blank SD card to channel 3](https://nothans.com/cable-82-tv-channel-build-tutorial-rasbperry-pi-3-b-and-old-crt-tv)
+- One-minute video: [CABLE 82 on the air](https://www.youtube.com/watch?v=d5Jcfx5oN0A)
+- Community Bulletin Board demo video: [the full six-minute demo](https://www.youtube.com/watch?v=0YEvI_oFfqY)
 
 ## Quick start
 
@@ -43,23 +48,95 @@ Open the first one in a browser on the same machine, or the second one from a la
 You are on the air.
 (If it prints something else instead, it is telling you why it could not start; see [Troubleshooting](#troubleshooting).)
 
-Then open the control room at `http://localhost:1982/config`: your name, your messages, your feeds, your colors, your page lineup.
-Hit Save and the channel picks it up within about twenty seconds, no reload.
-(Prefer a text editor? Everything lives in `config.json`; edit it directly and the channel still updates.)
+Out of the box the dial carries one channel: the Community Bulletin Board on 82.
+Want a second channel right now?
+`node channels/fetch-demo-channel.js` downloads a public-domain film lineup, and the control room's Channels panel puts it on the dial - details in [The dial](#the-dial).
 
-## The screen
+The control room at `http://localhost:1982/config` is where you run the network: your channels, your name, your messages, your feeds, your colors.
+Hit Save and it's on the air within about twenty seconds, no reload.
+(Prefer a text editor? Everything lives in `config.json`; edit it directly and the air still updates.)
+
+## The dial
+
+A dial of channels you flip through with a keyboard, a USB gamepad or joystick, or an HTTP call, all inside the one browser that's already on the air.
+
+Three kinds of channel:
+
+- **Bulletin** - the bundled [Community Bulletin Board](#channel-82-the-community-bulletin-board). Its lineup is the page rotation.
+- **Video** - a folder of video files under [`channels/`](channels/README.md), played in order on a *broadcast clock*: the channel's position is computed from the wall clock, so tuning away and back lands you mid-program, like real TV. Play in filename order or shuffled fresh each day. No videos of your own yet? `node channels/fetch-demo-channel.js` downloads **RETRO TV** - eight public-domain films from the Internet Archive's Prelinger collection (Duck and Cover, Design for Dreaming, One Got Fat...) - and you have a channel.
+- **External** - any URL in a frame; point one at [ws4kp](https://github.com/netbymatt/ws4kp) for a weather channel.
+
+A video channel can run around the clock or keep **scheduled hours** - dayparts like Saturday and Sunday 8:00 to 11:30.
+A window whose end time is at or before its start runs overnight into the next morning, so "Saturday 20:00 to 01:00" is one window, not two.
+Off the air it shows a test card with the resume time, color bars, or static - or falls back to the board.
+The control room draws the week as a grid so you can see the schedule at a glance.
+
+Tuning:
+
+- **Keyboard** - arrows or PageUp/PageDown to change channel, digits plus Enter to jump straight to a number.
+- **Gamepad** - a USB NES-style controller: up/down on the pad changes channel, Select jumps home to the board.
+- **HTTP** - `POST /api/tune` with `{"cmd":"up"}`, `{"cmd":"down"}`, or `{"cmd":"set","channel":2}`. GPIO buttons, a Stream Deck, or anything that can make a request becomes a remote control.
+
+Channel changes cover the cut with a beat of tuner static, then show a channel banner, exactly like a rented cable box.
+The tune API is meant for your LAN and is deliberately unauthenticated - anyone on your network can change the channel, which is also how a living room works.
+Don't expose it to the internet.
+
+The server also offers `GET /api/channels`, the folder inventory.
+For anyone building their own tuner source or listener (the bus carries events, not state, so a remote never fights the buttons):
+
+- `POST /api/tune` takes `{"cmd":"up"}`, `{"cmd":"down"}`, or `{"cmd":"set","channel":N}` and answers `{"ok":true,"seq":N,"listeners":N}`.
+- `GET /api/tune` answers `{"seq":N,"last":{...},"listeners":N}` - the last command and how many displays are listening, useful for checking a remote is wired up. It never reports a current channel, because the server doesn't hold one.
+- `GET /api/events` emits `hello` (`{"seq":N}`, your baseline on connect and reconnect), `tune` (a command with its `seq` - apply each seq once), and `config` (`{"version":...}` after a control-room save - the display reloads on it).
+- Both tune endpoints answer 403 while HTTP tuning is switched off in the control room.
+- `POST /api/channels/durations` is internal - the display reporting probed video durations back to the server's cache. It requires the same `x-cable82-config: 1` header as config saves.
+
+## Channel 82: the Community Bulletin Board
+
+Every cable system had one, somewhere on the dial: the community channel. This is channel 82.
+
+![The Community Bulletin Board on the 1987 Magnavox: blue screen, chunky text, a community message, and the crawl](images/cable-82-community-bulletin-board.jpg)
 
 1. **Header band** - channel name and the live time and date, always visible.
 2. **Pages** - full-screen colored pages that hard-cut every 12 seconds: a big clock, your community messages, DID YOU KNOW facts, DAD JOKE groaners, a WEATHER card, and headlines.
 3. **The crawl** - a continuous ticker of headlines along the bottom, fed by RSS.
 
+The WEATHER card is fed by Open-Meteo (free, no account): current conditions, hi/lo, and sunrise/sunset for a location you pick in the control room.
+(For a full weather *channel*, put [ws4kp](https://github.com/netbymatt/ws4kp) on the dial as an external channel.)
+
+| The time | The weather | A dad joke |
+| :---: | :---: | :---: |
+| ![The clock page: big time and date on a blue screen](images/clock.png) | ![The weather page: current conditions, hi/lo, and sunrise/sunset](images/weather.png) | ![A dad joke page](images/dad-joke.png) |
+
+### Channel 82 Background Music
+
+Add audio files into the [`music/`](music/) folder and channel 82 plays them as a continuous background bed behind its pages, looping the whole set (shuffle optional).
+
+Browsers block autoplay until a user gesture, so on a desktop the music starts on your first click; on the Pi kiosk the `--autoplay-policy=no-user-gesture-required` flag below starts it from boot.
+
+### CheerLights
+
+The crawl carries one extra item: the latest [CheerLights](https://cheerlights.com) color.
+CheerLights is a single global color that anyone in the world can set, and every connected light on the planet follows along.
+CABLE 82 checks it about once a minute (server-side, like every other fetch) and scrolls your message with the color name filled in: `THE WORLD IS SET TO {COLOR}` comes out as `THE WORLD IS SET TO PURPLE`.
+
+![The CheerLights color riding the CABLE 82 crawl on a CRT](images/cheerlights-crawl-crt.png)
+
+Turn it off, or make the message yours, in the control room - or in `config.json`:
+
+```json
+"cheerlights": {
+  "enabled": true,
+  "template": "THE WORLD IS SET TO {COLOR}"
+}
+```
+
 ## Configuration (control room or `config.json`)
 
-The control room at `/config` is the friendly way in: one screen with the whole channel - identity, timing, feeds, the page rotation, community messages, the crawl, and colors.
+The control room at `/config` is the friendly way in: one screen with the whole network - identity, the dial of channels and their schedules, feeds, channel 82's page rotation, community messages, the crawl, and colors.
 Every change is validated on the server, written to `config.json`, and picked up on air.
-The two ways in stay honest with each other: if `config.json` changes while a control room is open (a hand edit, or a save from another tab), the open screen warns you, and a stale Save is refused instead of overwriting the newer file.
+If `config.json` changes while a control room is open (a hand edit, or a save from another tab), the open screen warns you, and a stale Save is refused instead of overwriting the newer file.
 
-![The CABLE 82 control room at /config: the whole channel on one screen](images/config.png)
+![The CABLE 82 control room at /config: the whole network on one screen](images/config.png)
 
 `config.json` is the file underneath, and you can hand-edit it just as happily.
 The keys:
@@ -69,7 +146,9 @@ The keys:
 | `channelName`, `tagline` | Header identity and crawl fallback text | `CABLE 82` |
 | `timeFormat` | `"12h"` or `"24h"` | `12h` |
 | `port` | Server port | `1982` |
-| `rotation` | The page lineup, in order (`clock`, `messages`, `facts`, `dadjokes`, `weather`, `headlines`) | see file |
+| `channels` | The dial: `{ number, name, type, enabled }` plus per-type fields - video channels add `folder`, `order` (`sequence`/`shuffle-daily`), `mode` (`continuous`/`schedule`), `schedule` windows (`{ days, start, end }`), and `offAir` (`testcard`/`bars`/`snow`/`bulletin`); external channels add `url`. Empty means the board alone as channel 82 | the board on 82 |
+| `tuner` | Which tuning inputs are live (`sources.keyboard`, `sources.gamepad`, `sources.http`) and whether the dial wraps at the ends (`wrap`) | all on, wraps |
+| `rotation` | Channel 82's page lineup, in order (`clock`, `messages`, `facts`, `dadjokes`, `weather`, `headlines`) | see file |
 | `pageSeconds` | Seconds per page | `12` |
 | `feeds` | RSS/Atom feeds: `{ id, label, url }`. The server only ever fetches these URLs | WBUR, Hacker News, nothans.com |
 | `refreshMinutes` | Feed re-fetch interval | `10` |
@@ -99,7 +178,6 @@ If the network dies entirely, the clock, messages, and facts keep going forever.
 ## Running it on a real CRT (Raspberry Pi)
 
 Everything below was run end to end on a Raspberry Pi 3 Model B+ with Raspberry Pi OS (64-bit) "Trixie" and a 1987 Magnavox portable over an HDMI-to-RF modulator on channel 3; the [build tutorial](https://nothans.com/cable-82-tv-channel-build-tutorial-rasbperry-pi-3-b-and-old-crt-tv) walks the same ground with photos.
-Newer Pis are easier; the notes say where an older one differs.
 
 ### Node.js on a Raspberry Pi
 
@@ -115,11 +193,11 @@ node -v
 `node -v` should now print `v22`.
 NodeSource builds for 64-bit only these days; on a 32-bit image use `sudo apt install nodejs` and take the distro's Node 20.
 A Pi 1, Pi Zero, or Zero W is ARMv6: Node 20 installs from `apt` and the server runs, but no current browser runs on that chip (Chromium refuses it outright), so it can be the server and never the TV.
-Start at a Pi 2; a Pi 3 B+ or 4 runs the channel comfortably.
+A Pi 2 runs the bulletin board; video channels want a Pi 3 B+ or newer (H.264 up to ~480p decodes comfortably in software there; measured on the 3 B+).
 
-Then clone and start the channel exactly as in Quick start, and read the addresses it prints.
+Then clone and start it exactly as in Quick start, and read the addresses it prints.
 
-### 1. Feed it properly
+### 1. Power it properly
 
 A Pi 3 wants a 5V 2.5A supply and a short, thick micro-USB cable; a phone charger will boot it and then quietly run it at less than half speed.
 Check:
@@ -302,49 +380,26 @@ Step 4 above supplies one (`drm.edid_firmware=` plus the shipped `edid/cable82-6
 The power supply.
 A Pi 3 on a phone charger runs at 600MHz with under-voltage flags set; a 5V 2.5A supply and a short cable fix it.
 
-**The channel is up but feeds, weather, or CheerLights are blank.**
+**The board is up but feeds, weather, or CheerLights are blank.**
 The clock, messages, facts, and jokes never need the network; the rest is fetched by the server.
 `journalctl -u cable82 -f` (or the terminal) logs each fetch failure with the reason.
 
 **The systemd service will not start**: `systemctl status cable82` shows why.
 The usual suspects are `User=` naming an account that does not exist, `ExecStart=` pointing at a `node` that is not at `/usr/bin/node` (`which node`), or the repo living somewhere other than `/home/pi/cable-82`.
 
-## Music
-
-The real channels were never silent, and neither is CABLE 82.
-Drop audio files into the [`music/`](music/) folder and the channel plays them as a continuous background bed behind the pages, looping the whole set (shuffle optional).
-Two tracks ship with the channel, a 1980s one and a 1990s one; the rest is up to you.
-Turn music on or off, shuffle, and set the volume in the control room.
-
-Browsers block autoplay until a user gesture, so on a desktop the music starts on your first click; on the Pi kiosk the `--autoplay-policy=no-user-gesture-required` flag above starts it from boot.
-
-## CheerLights
-
-The crawl carries one extra item: the latest [CheerLights](https://cheerlights.com) color. CheerLights is a single global color that anyone in the world can set, and every connected light on the planet follows along. CABLE 82 checks it about once a minute (server-side, like every other fetch) and scrolls your message with the color name filled in: `THE WORLD IS SET TO {COLOR}` comes out as `THE WORLD IS SET TO PURPLE`.
-
-![The CheerLights color riding the CABLE 82 crawl on a CRT](images/cheerlights-crawl-crt.png)
-
-Turn it off, or make the message yours, in the control room. Or, by editing the  `config.json`:
-
-```json
-"cheerlights": {
-  "enabled": true,
-  "template": "THE WORLD IS SET TO {COLOR}"
-}
-```
-
 ## Testing
 
-- Server: `node --test test/server.test.mjs`
-- Client pure functions: start the server and open `http://localhost:1982/test/harness.html`
-- Failure drill: `node server.js --chaos` serves mock feeds that randomly hang and fail, so you can watch the channel shrug it off
-- Soak: open `http://localhost:1982/?soak=1` for accelerated page flips and refreshes with stats logged to the console
+- Server: `node --test test/server.test.mjs` - config validation, feeds, the channels API, the tuner bus, and Range serving.
+- Client pure functions: start the server and open `http://localhost:1982/test/harness.html` - the broadcast clock, schedules (overnight windows included), playlist order, and the dial.
+- Tuner drill: with more than one channel on the dial, `curl -X POST http://localhost:1982/api/tune -H "content-type: application/json" -d "{\"cmd\":\"up\"}"` and watch the display change channels - the whole bus in one command.
+- Failure drill: `node server.js --chaos` serves mock feeds that randomly hang and fail, so you can watch channel 82 shrug it off.
+- Soak: open `http://localhost:1982/?soak=1` for accelerated channel-82 page flips and refreshes with stats logged to the console.
 
 ## Credits
 
 - Typeface: [The Ultimate Oldschool PC Font Pack](https://int10h.org/oldschool-pc-fonts/) by VileR (CC BY-SA 4.0), the IBM VGA 8x16 face. See `fonts/LICENSE.txt`.
 - Weather data from [Open-Meteo](https://open-meteo.com/) (free, no API key; CC BY 4.0).
-- Spiritual ancestors: every local cable text channel that ever scrolled a bake sale, and [ws4kp](https://github.com/netbymatt/ws4kp) for proving retro TV nostalgia belongs on the web.
+- ws4kp project, a web-based WeatherStar 4000: [ws4kp](https://github.com/netbymatt/ws4kp).
 
 ## License
 

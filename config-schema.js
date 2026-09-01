@@ -45,6 +45,29 @@
   const TYPES = new Set(["clock", "messages", "facts", "dadjokes", "weather", "headlines"]);
   const DEFAULT_ROTATION = [{ type: "clock" }, { type: "messages" }, { type: "facts" }];
 
+  // Channels: the dial. bulletin is the classic CABLE 82 board, video is a
+  // folder of files played on the broadcast clock, external is a URL in a
+  // frame (how ws4kp joins the dial without being absorbed).
+  const CHANNEL_TYPES = new Set(["bulletin", "video", "external"]);
+  const OFFAIR_MODES = new Set(["testcard", "bars", "snow", "bulletin"]);
+  const CHANNEL_ORDERS = new Set(["sequence", "shuffle-daily"]);
+  const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+  // A channel folder is one plain path segment under channels/ - no
+  // separators, no traversal, no leading dot. The server enforces it again.
+  const FOLDER_RE = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}$/;
+
+  // "HH:MM" -> minutes since midnight, or null. Shared by validation here
+  // and the air-state math in the display.
+  function parseHM(s) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(typeof s === "string" ? s.trim() : "");
+    if (!m) return null;
+    const h = Number(m[1]);
+    const min = Number(m[2]);
+    if (h === 24 && min === 0) return 1440; // "until midnight", hand-edit friendly
+    if (h > 23 || min > 59) return null;
+    return h * 60 + min;
+  }
+
   // WMO weather codes -> short broadcast-safe condition text. Open-Meteo
   // returns these codes; the card shows the word.
   const WMO = {
@@ -278,6 +301,134 @@
     };
   }
 
+  // A schedule window: which days, from when to when, as canonical "HH:MM"
+  // strings. end at or before start means the window runs overnight into the
+  // next morning ("SAT 20:00-01:00"); windowSegments() below expands any
+  // window into non-wrapping per-day segments, so downstream air-state math
+  // keeps its start < end invariant.
+  function validateWindow(raw, errors, chNumber) {
+    if (!raw || typeof raw !== "object") return null;
+    const days = (Array.isArray(raw.days) ? raw.days : [])
+      .map((d) => String(d).slice(0, 3).toLowerCase())
+      .filter((d, i, a) => DAY_KEYS.includes(d) && a.indexOf(d) === i);
+    const start = parseHM(raw.start);
+    const end = parseHM(raw.end);
+    if (!days.length || start == null || end == null || start === end) {
+      errors.push("CHANNEL " + chNumber + ": INVALID SCHEDULE WINDOW SKIPPED");
+      return null;
+    }
+    return { days, start: String(raw.start).trim(), end: String(raw.end).trim() };
+  }
+
+  // Expand one window into non-wrapping segments: [{ day, start, end }] with
+  // day a DAY_KEYS index and minutes satisfying start < end. A normal window
+  // yields one segment per day; an overnight window yields an evening
+  // segment plus a next-morning segment (dropped when empty, so
+  // "20:00-00:00" reads as "until midnight").
+  function windowSegments(w) {
+    const start = parseHM(w && w.start);
+    const end = parseHM(w && w.end);
+    const segs = [];
+    if (start == null || end == null || !w || !Array.isArray(w.days)) return segs;
+    for (const key of w.days) {
+      const day = DAY_KEYS.indexOf(key);
+      if (day < 0) continue;
+      if (start < end) {
+        segs.push({ day, start, end });
+      } else {
+        segs.push({ day, start, end: 1440 });
+        if (end > 0) segs.push({ day: (day + 1) % 7, start: 0, end, cont: true });
+      }
+    }
+    return segs;
+  }
+
+  // The dial. Absent or empty -> a one-channel system: the classic board as
+  // channel 82, so every existing config upgrades without being edited.
+  function validateChannels(raw, cfg, errors) {
+    const list = Array.isArray(raw.channels) ? raw.channels : [];
+    const out = [];
+    const seen = new Set();
+    for (const c of list) {
+      if (!c || typeof c !== "object" || !CHANNEL_TYPES.has(c.type)) {
+        errors.push("CHANNEL WITH UNKNOWN TYPE SKIPPED: " + String(c && c.type));
+        continue;
+      }
+      const rawNumber = Number(c.number);
+      const number = Number.isFinite(rawNumber) && rawNumber >= 1 && rawNumber <= 999 ? Math.round(rawNumber) : NaN;
+      if (!Number.isFinite(number)) {
+        // A cleared number input arrives as 0; clamping it would invent a
+        // surprise channel 1, so skip loudly instead.
+        errors.push("CHANNEL WITHOUT A VALID NUMBER (1-999) SKIPPED");
+        continue;
+      }
+      if (seen.has(number)) {
+        errors.push("DUPLICATE CHANNEL NUMBER SKIPPED: " + number);
+        continue;
+      }
+      const ch = {
+        number,
+        type: c.type,
+        name: sanitize(c.name, 40) || (c.type === "bulletin" ? cfg.channelName : "CHANNEL " + number),
+        enabled: c.enabled !== false,
+      };
+      if (c.type === "video") {
+        const folder = typeof c.folder === "string" ? c.folder.trim() : "";
+        if (!FOLDER_RE.test(folder) || folder.includes("..")) {
+          errors.push("CHANNEL " + number + ": BAD OR MISSING FOLDER, SKIPPED");
+          continue;
+        }
+        ch.folder = folder;
+        ch.mode = c.mode === "schedule" ? "schedule" : "continuous";
+        ch.order = CHANNEL_ORDERS.has(c.order) ? c.order : "sequence";
+        ch.offAir = OFFAIR_MODES.has(c.offAir) ? c.offAir : "testcard";
+        ch.schedule = (Array.isArray(c.schedule) ? c.schedule : [])
+          .map((w) => validateWindow(w, errors, number))
+          .filter(Boolean);
+        if (ch.mode === "schedule" && !ch.schedule.length) {
+          errors.push("CHANNEL " + number + ": SCHEDULE MODE WITH NO VALID WINDOWS - ALWAYS OFF AIR");
+        }
+      }
+      if (c.type === "external") {
+        const url = typeof c.url === "string" ? c.url.trim() : "";
+        if (!/^https?:\/\//i.test(url)) {
+          errors.push("CHANNEL " + number + ": EXTERNAL WITHOUT AN HTTP(S) URL, SKIPPED");
+          continue;
+        }
+        ch.url = url.slice(0, 300);
+      }
+      seen.add(number);
+      out.push(ch);
+    }
+    if (!out.length) {
+      out.push({ number: 82, name: cfg.channelName, type: "bulletin", enabled: true });
+    }
+    // The dial is ordered by number; the number IS the order. Sort before
+    // the force-enable below so the enabled fallback is the lowest number,
+    // not whichever was listed first.
+    out.sort((a, b) => a.number - b.number);
+    if (!out.some((c) => c.enabled)) {
+      errors.push("NO ENABLED CHANNELS - ENABLING CHANNEL " + out[0].number);
+      out[0].enabled = true;
+    }
+    return out;
+  }
+
+  // The tuner: which input sources are live, and whether the dial wraps.
+  function validateTuner(raw) {
+    const t = raw && typeof raw === "object" ? raw : {};
+    const src = t.sources && typeof t.sources === "object" ? t.sources : {};
+    const on = (v, dflt) => (typeof v === "boolean" ? v : dflt);
+    return {
+      sources: {
+        keyboard: on(src.keyboard, true),
+        gamepad: on(src.gamepad, true),
+        http: on(src.http, true),
+      },
+      wrap: on(t.wrap, true),
+    };
+  }
+
   // ---------------------------------------------------------- validateConfig
 
   // Takes the raw editable config (parsed JSON, or the config.js global for
@@ -370,6 +521,9 @@
       .map((m) => ({ text: sanitize(m.text, 200), color: typeof m.color === "string" ? m.color : null }))
       .filter((m) => m.text);
 
+    cfg.channels = validateChannels(raw, cfg, errors);
+    cfg.tuner = validateTuner(raw.tuner);
+
     const rawColors = raw.colors && typeof raw.colors === "object" ? raw.colors : {};
     let cycle = Array.isArray(rawColors.pageCycle) ? rawColors.pageCycle.filter((c) => typeof c === "string") : [];
     if (!cycle.length) cycle = ["blue", "green", "red", "cyan"];
@@ -387,12 +541,19 @@
     PALETTE_CRT,
     TEXT_ON,
     TYPES,
+    CHANNEL_TYPES,
+    OFFAIR_MODES,
+    CHANNEL_ORDERS,
+    DAY_KEYS,
     DEFAULT_CONFIG,
     clampNum,
     resolveColor,
     textColorFor,
     sanitize,
     weatherText,
+    parseHM,
+    FOLDER_RE,
+    windowSegments,
     validateConfig,
   };
 });

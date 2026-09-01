@@ -60,9 +60,42 @@ const MIME = {
   ".opus": "audio/ogg",
   ".wav": "audio/wav",
   ".flac": "audio/flac",
+  ".mp4": "video/mp4",
+  ".m4v": "video/mp4",
+  ".webm": "video/webm",
+  ".ogv": "video/ogg",
+  ".mov": "video/quicktime",
 };
 
 const AUDIO_RE = /\.(mp3|m4a|aac|ogg|oga|opus|wav|flac)$/i;
+const VIDEO_RE = /\.(mp4|m4v|webm|ogv|mov)$/i;
+
+// Natural sort: digit runs compare numerically, so "S01.E2" sorts before
+// "S01.E10" and seasons order before episodes. Case-insensitive.
+function naturalCompare(a, b) {
+  const ax = String(a).toLowerCase().split(/(\d+)/);
+  const bx = String(b).toLowerCase().split(/(\d+)/);
+  for (let i = 0; i < Math.max(ax.length, bx.length); i++) {
+    const as = ax[i] || "";
+    const bs = bx[i] || "";
+    if (as === bs) continue;
+    const an = /^\d+$/.test(as) ? Number(as) : NaN;
+    const bn = /^\d+$/.test(bs) ? Number(bs) : NaN;
+    if (Number.isFinite(an) && Number.isFinite(bn)) {
+      if (an !== bn) return an - bn;
+      continue; // "1" vs "01": same episode number, keep comparing
+    }
+    return as < bs ? -1 : 1;
+  }
+  // Segments all tie (maybe only padding differs): raw string settles it.
+  return String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0;
+}
+
+// RFC 9110: a 405 names the methods that would have worked.
+function send405(res, allow) {
+  res.writeHead(405, { "content-type": "text/plain; charset=utf-8", allow });
+  res.end("METHOD NOT ALLOWED");
+}
 
 function send(res, code, text) {
   if (res.headersSent) return;
@@ -171,6 +204,7 @@ function createApp(opts = {}) {
       chaos: false,
       configPath: path.join(ROOT, "config.json"),
       musicDir: path.join(ROOT, "music"),
+      channelsDir: path.join(ROOT, "channels"),
       upstreamTimeoutMs: 10000,
       maxFeedBytes: 1024 * 1024,
       maxConfigBytes: 512 * 1024,
@@ -314,11 +348,14 @@ function createApp(opts = {}) {
           }
           res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
           res.end(JSON.stringify({ ok: true, version: String(configVersion()), config: result.cfg, warnings: result.warnings }));
+          // Tell every connected display immediately; the poll stays as the
+          // fallback for a display that connected before SSE existed.
+          sseBroadcast("config", { version: String(configVersion()) });
         })
         .catch(() => send(res, 413, "CONFIG BODY TOO LARGE"));
       return;
     }
-    return send(res, 405, "METHOD NOT ALLOWED");
+    return send405(res, "GET, POST");
   }
 
   // Geocode a place name into coordinates + timezone for the control room.
@@ -427,6 +464,204 @@ function createApp(opts = {}) {
     }
   }
 
+  // ---------------- channels (the dial's video folders)
+
+  // Per-folder duration cache, kept beside the videos as .durations.json.
+  // The server never probes media itself (dependency-free); the display
+  // learns each file's duration once from the <video> metadata and posts it
+  // back, so the cache fills itself on first play and then stays.
+  function readDurations(folder) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(path.join(o.channelsDir, folder, ".durations.json"), "utf8"));
+      return raw && typeof raw === "object" ? raw : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  // One safe path segment under channels/ - the schema's rule, not a copy
+  // of it, so the two can never drift apart.
+  function safeFolder(name) {
+    return typeof name === "string" && SCHEMA.FOLDER_RE.test(name) && !name.includes("..");
+  }
+
+  function listChannelFiles(folder) {
+    const dir = path.join(o.channelsDir, folder);
+    const durations = readDurations(folder);
+    let names = [];
+    try {
+      names = fs.readdirSync(dir).filter((f) => VIDEO_RE.test(f)).sort(naturalCompare);
+    } catch (e) {
+      return null; // folder missing
+    }
+    return names.map((f) => ({
+      file: f,
+      url: "channels/" + encodeURIComponent(folder) + "/" + encodeURIComponent(f),
+      duration: Number.isFinite(durations[f]) ? durations[f] : null,
+    }));
+  }
+
+  // GET /api/channels: every folder under channels/ (for the control room's
+  // picker) plus the playlist for each configured video channel (for the
+  // display). One endpoint, one scan, both consumers.
+  function handleChannels(res) {
+    const folders = [];
+    try {
+      for (const name of fs.readdirSync(o.channelsDir).sort(naturalCompare)) {
+        if (!safeFolder(name)) continue;
+        let st;
+        try {
+          st = fs.statSync(path.join(o.channelsDir, name));
+        } catch (e) {
+          continue;
+        }
+        if (!st.isDirectory()) continue;
+        const files = listChannelFiles(name) || [];
+        const known = files.filter((f) => f.duration != null);
+        folders.push({
+          folder: name,
+          files: files.length,
+          seconds: Math.round(known.reduce((a, f) => a + f.duration, 0)),
+          probed: known.length,
+        });
+      }
+    } catch (e) {
+      /* no channels folder yet: an empty dial is fine */
+    }
+    const cfg = loadConfig();
+    const channels = [];
+    for (const ch of (cfg && cfg.channels) || []) {
+      if (ch.type !== "video") continue;
+      channels.push({ number: ch.number, folder: ch.folder, files: listChannelFiles(ch.folder) || [] });
+    }
+    res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+    res.end(JSON.stringify({ folders, channels }));
+  }
+
+  // POST /api/channels/durations {folder, durations:{file:seconds}} - the
+  // display reporting what it measured. Guarded like a config write, and
+  // only files that actually exist in the folder are recorded.
+  function handleDurations(req, res) {
+    if (req.method !== "POST") return send405(res, "POST");
+    if (req.headers["x-cable82-config"] !== "1") return send(res, 403, "MISSING CONFIG HEADER");
+    readBody(req, 256 * 1024)
+      .then((body) => {
+        let raw;
+        try {
+          raw = JSON.parse(body);
+        } catch (e) {
+          return send(res, 400, "INVALID JSON");
+        }
+        const folder = raw && raw.folder;
+        if (!safeFolder(folder)) return send(res, 400, "BAD FOLDER");
+        const dir = path.join(o.channelsDir, folder);
+        let names;
+        try {
+          names = new Set(fs.readdirSync(dir).filter((f) => VIDEO_RE.test(f)));
+        } catch (e) {
+          return send(res, 404, "UNKNOWN FOLDER");
+        }
+        const cache = readDurations(folder);
+        let wrote = 0;
+        const entries = raw.durations && typeof raw.durations === "object" ? raw.durations : {};
+        for (const [file, dur] of Object.entries(entries)) {
+          const d = Number(dur);
+          if (!names.has(file) || !Number.isFinite(d) || d <= 0 || d > 24 * 3600) continue;
+          cache[file] = Math.round(d * 100) / 100;
+          wrote++;
+        }
+        try {
+          fs.writeFileSync(path.join(dir, ".durations.json"), JSON.stringify(cache, null, 2) + "\n");
+        } catch (e) {
+          return send(res, 500, "CACHE WRITE FAILED: " + e.message);
+        }
+        res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ ok: true, wrote }));
+      })
+      .catch(() => send(res, 413, "BODY TOO LARGE"));
+  }
+
+  // ---------------- the tuner bus (events, not state)
+
+  // Sources send events - up, down, set - and the display applies each one
+  // once, tracked by sequence number. The server never asserts a current
+  // channel, so an HTTP source can never fight the gamepad. Learned the hard
+  // way: a source that re-declares "the channel is X" overrides every local
+  // tune a second later.
+  const sseClients = new Set();
+  let tuneSeq = 0;
+  let lastTune = null;
+
+  function sseBroadcast(event, data) {
+    const msg = "event: " + event + "\ndata: " + JSON.stringify(data) + "\n\n";
+    for (const client of sseClients) {
+      try {
+        client.write(msg);
+      } catch (e) {
+        sseClients.delete(client);
+      }
+    }
+  }
+
+  function handleTune(req, res) {
+    const cfg = loadConfig();
+    if (!cfg || !cfg.tuner.sources.http) return send(res, 403, "HTTP TUNING IS DISABLED");
+    if (req.method === "GET") {
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+      return res.end(JSON.stringify({ seq: tuneSeq, last: lastTune, listeners: sseClients.size }));
+    }
+    if (req.method !== "POST") return send405(res, "GET, POST");
+    readBody(req, 4096)
+      .then((body) => {
+        let raw;
+        try {
+          raw = JSON.parse(body);
+        } catch (e) {
+          return send(res, 400, "INVALID JSON");
+        }
+        const cmd = raw && raw.cmd;
+        if (cmd !== "up" && cmd !== "down" && cmd !== "set") return send(res, 400, "CMD MUST BE up, down, OR set");
+        const evt = { seq: ++tuneSeq, cmd };
+        if (cmd === "set") {
+          const n = Math.round(Number(raw.channel));
+          if (!Number.isFinite(n) || n < 1 || n > 999) return send(res, 400, "SET NEEDS A CHANNEL NUMBER");
+          evt.channel = n;
+        }
+        lastTune = evt;
+        sseBroadcast("tune", evt);
+        res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ ok: true, seq: evt.seq, listeners: sseClients.size }));
+      })
+      .catch(() => send(res, 413, "BODY TOO LARGE"));
+  }
+
+  // GET /api/events: the display's ear. Server-Sent Events - plain HTTP,
+  // no dependency, and the browser reconnects by itself, which matters on a
+  // box that runs for weeks. A comment ping every 25s keeps middleboxes from
+  // closing the idle stream.
+  function handleEvents(req, res) {
+    res.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-store",
+      connection: "keep-alive",
+    });
+    res.on("error", () => { /* dead socket: the close handler cleans up */ });
+    res.write(": cable-82 tuner bus\n\n");
+    res.write("event: hello\ndata: " + JSON.stringify({ seq: tuneSeq }) + "\n\n");
+    sseClients.add(res);
+    const ping = setInterval(() => {
+      try {
+        res.write(": ping\n\n");
+      } catch (e) {
+        /* cleanup happens on close */
+      }
+    }, 25000);
+    req.on("close", () => {
+      clearInterval(ping);
+      sseClients.delete(res);
+    });
+  }
+
   // List the audio files in the music folder (sorted). The display plays
   // them as continuous background music; the control room shows the list.
   function handleMusic(res) {
@@ -441,23 +676,42 @@ function createApp(opts = {}) {
     res.end(JSON.stringify({ tracks }));
   }
 
-  function serveStatic(pathname, res) {
+  function serveStatic(pathname, res, rangeHeader) {
     let p = pathname === "/" ? "/index.html" : pathname;
     if (p === "/config") p = "/config.html"; // friendly control-room URL
     const segments = p.split("/").filter(Boolean);
-    // No parent traversal, no dotfiles (.git, .meta, ...).
+    // No parent traversal, no dotfiles (.git, .meta, .durations.json, ...).
     if (!segments.length || segments.some((s) => s === ".." || s.startsWith("."))) {
       return send(res, 403, "FORBIDDEN");
     }
     const fp = path.normalize(path.join(ROOT, ...segments));
     if (!fp.startsWith(ROOT + path.sep)) return send(res, 403, "FORBIDDEN");
-    fs.readFile(fp, (err, buf) => {
-      if (err) return send(res, 404, "NOT FOUND");
-      res.writeHead(200, {
-        "content-type": MIME[path.extname(fp).toLowerCase()] || "application/octet-stream",
-        "cache-control": "no-cache",
-      });
-      res.end(buf);
+    fs.stat(fp, (err, st) => {
+      if (err || !st.isFile()) return send(res, 404, "NOT FOUND");
+      const type = MIME[path.extname(fp).toLowerCase()] || "application/octet-stream";
+      const base = { "content-type": type, "cache-control": "no-cache", "accept-ranges": "bytes" };
+      // Range requests: how <video> seeks, and how the broadcast clock joins
+      // a file mid-program without downloading everything before the offset.
+      const m = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader || "");
+      if (m && (m[1] || m[2])) {
+        let start = m[1] ? Number(m[1]) : Math.max(0, st.size - Number(m[2]));
+        let end = m[1] && m[2] ? Math.min(Number(m[2]), st.size - 1) : st.size - 1;
+        if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= st.size) {
+          res.writeHead(416, { "content-range": "bytes */" + st.size });
+          return res.end();
+        }
+        res.writeHead(206, Object.assign(base, {
+          "content-range": "bytes " + start + "-" + end + "/" + st.size,
+          "content-length": end - start + 1,
+        }));
+        const stream = fs.createReadStream(fp, { start, end });
+        stream.on("error", () => res.destroy());
+        return stream.pipe(res);
+      }
+      res.writeHead(200, Object.assign(base, { "content-length": st.size }));
+      const stream = fs.createReadStream(fp);
+      stream.on("error", () => res.destroy());
+      stream.pipe(res);
     });
   }
 
@@ -481,6 +735,22 @@ function createApp(opts = {}) {
         handleMusic(res);
         return;
       }
+      if (pathname === "/api/channels") {
+        handleChannels(res);
+        return;
+      }
+      if (pathname === "/api/channels/durations") {
+        handleDurations(req, res);
+        return;
+      }
+      if (pathname === "/api/tune") {
+        handleTune(req, res);
+        return;
+      }
+      if (pathname === "/api/events") {
+        handleEvents(req, res);
+        return;
+      }
       if (pathname === "/api/cheerlights") {
         handleCheerlights(res).catch((e) => send(res, 500, "SERVER ERROR: " + e.message));
         return;
@@ -490,7 +760,7 @@ function createApp(opts = {}) {
         handleFeed(id, res).catch((e) => send(res, 500, "SERVER ERROR: " + e.message));
         return;
       }
-      serveStatic(pathname, res);
+      serveStatic(pathname, res, req.headers.range);
     } catch (e) {
       send(res, 400, "BAD REQUEST");
     }
@@ -552,4 +822,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { createApp, listenUrls };
+module.exports = { createApp, listenUrls, naturalCompare };

@@ -256,3 +256,72 @@ html, body { height: 100%; background: var(--letterbox); }
 #error-title { font-size: calc(var(--u) * 48); line-height: 1; }
 #error-sub { font-size: calc(var(--u) * 24); line-height: 1.4; }
 #error-detail { font-size: calc(var(--u) * 16); line-height: 1.5; }
+
+/* ------------------------------------------------------------- the dial */
+/* Channel layers sit above the bulletin board inside the same stage. Only
+   the visible channel does work; hidden layers are stopped, not paused. */
+
+#video-layer, #card-layer, #external-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  background: var(--c-ink);
+}
+
+#video-layer video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+#external-layer iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--c-ink);
+}
+
+/* Off-air card: bars, clock, the resume line. Same face, same palette. */
+#card-layer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--u) * 16);
+  color: var(--c-white);
+  text-align: center;
+}
+#card-layer[hidden] { display: none; }
+#card-bars { display: flex; width: 76%; height: 34%; }
+#card-bars i { flex: 1; }
+#card-clock { font-size: calc(var(--u) * 28); }
+#card-name { font-size: calc(var(--u) * 18); letter-spacing: 0.08em; }
+#card-msg { font-size: calc(var(--u) * 13); line-height: 1.7; letter-spacing: 0.1em; }
+
+/* Tuning static: a small noise canvas scaled up reads like real snow. */
+#tuner-snow {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 50;
+  image-rendering: pixelated;
+}
+
+/* The channel bug: shown on every tune, fades on its own. */
+#channel-bug {
+  position: absolute;
+  left: calc(var(--ovx) + var(--u) * 8);
+  top: calc(var(--ovy) + var(--u) * 46);
+  z-index: 60;
+  color: var(--c-white);
+  text-shadow: calc(var(--u) * 2) calc(var(--u) * 2) 0 var(--c-ink);
+  letter-spacing: 0.06em;
+  transition: opacity 0.5s;
+}
+#channel-bug[hidden] { display: none; }
+#channel-bug.fading { opacity: 0; }
+#bug-number { font-size: calc(var(--u) * 34); line-height: 1; }
+#bug-name { font-size: calc(var(--u) * 14); opacity: 0.92; }

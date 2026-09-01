@@ -24,8 +24,24 @@
   let messages = [];
   let crawlFeeds = [];
   let pageCycle = [];
+  let channels = []; // the dial, edited row by row like the lists above
+  let channelFolders = []; // [{folder, files, seconds, probed}] from /api/channels
   let wxLocation = null; // { name, latitude, longitude, timezone, country } or null
   let bootVersion = null;
+
+  const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+  const DAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+  const CHANNEL_TYPE_OPTIONS = [
+    ["bulletin", "Bulletin board"],
+    ["video", "Video folder"],
+    ["external", "External page"],
+  ];
+  const OFFAIR_OPTIONS = [
+    ["testcard", "Test card"],
+    ["bars", "Color bars"],
+    ["snow", "Static"],
+    ["bulletin", "Bulletin board"],
+  ];
 
   // Textareas hold one item per line; split/join at the config boundary.
   const linesToArray = (text) => text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
@@ -106,6 +122,167 @@
     crawlFeeds = crawlFeeds.filter((id) => ids.has(id));
     renderRotation();
     renderCrawlFeeds();
+  }
+
+  // ---------------------------------------------------------- render: channels
+
+  function folderLabel(f) {
+    const mins = Math.round(f.seconds / 60);
+    const dur = f.probed < f.files ? f.files + " files" : f.files + " files, " + (mins >= 60 ? Math.floor(mins / 60) + "h " + (mins % 60) + "m" : mins + "m");
+    return f.folder + "  (" + dur + ")";
+  }
+
+  function renderChannels() {
+    const host = $("channels");
+    host.innerHTML = "";
+    if (!channels.length) {
+      host.appendChild(el("div", { class: "empty" }, "No channels: the board runs alone as channel 82. Add one to grow the dial."));
+    }
+    // The number IS the order, so rows sort themselves and need no arrows.
+    channels.sort((a, b) => (a.number || 0) - (b.number || 0));
+    channels.forEach((ch, i) => {
+      const head = el("div", { class: "ch-head" }, [
+        el("input", {
+          class: "ch-number", type: "number", min: 1, max: 999, value: ch.number != null ? ch.number : "",
+          "aria-label": "Channel number", placeholder: "82",
+          onchange: (e) => { ch.number = Number(e.target.value); renderChannels(); },
+        }),
+        el("input", {
+          class: "ch-name", type: "text", maxlength: 40, value: ch.name || "",
+          "aria-label": "Channel name", placeholder: ch.type === "bulletin" ? "CABLE 82" : "CHANNEL NAME",
+          onchange: (e) => { ch.name = e.target.value; },
+        }),
+        el("select", {
+          "aria-label": "Channel type",
+          onchange: (e) => { ch.type = e.target.value; renderChannels(); },
+        }, CHANNEL_TYPE_OPTIONS.map(([v, label]) => option(v, label, v === ch.type))),
+        el("label", { class: "toggle" }, [
+          (() => { const c = el("input", { type: "checkbox", "aria-label": "Channel enabled" }); c.checked = ch.enabled !== false; c.addEventListener("change", () => { ch.enabled = c.checked; }); return c; })(),
+          " on the dial",
+        ]),
+        el("div", { class: "row-actions" }, [
+          el("button", { type: "button", class: "icon danger", title: "Remove channel", "aria-label": "Remove channel",
+            onclick: () => { channels.splice(i, 1); renderChannels(); } }, "✕"),
+        ]),
+      ]);
+
+      const body = el("div", { class: "ch-body" });
+      if (ch.type === "bulletin") {
+        body.appendChild(el("span", { class: "note" }, "Shows the board: the page rotation below is this channel's lineup."));
+      } else if (ch.type === "external") {
+        body.appendChild(el("input", {
+          type: "url", style: "flex:1;min-width:14em", value: ch.url || "", placeholder: "http://localhost:8080/  (ws4kp, say)",
+          "aria-label": "External URL",
+          onchange: (e) => { ch.url = e.target.value; },
+        }));
+      } else {
+        // video: folder picker (never a typed path), mode, order, off-air look
+        const known = channelFolders.some((f) => f.folder === ch.folder);
+        body.appendChild(el("select", {
+          "aria-label": "Video folder",
+          onchange: (e) => { ch.folder = e.target.value; renderChannels(); },
+        }, [
+          ...(!ch.folder ? [option("", "(pick a folder under channels/)", true)] : []),
+          ...(ch.folder && !known ? [option(ch.folder, ch.folder + "  (folder missing!)", true)] : []),
+          ...channelFolders.map((f) => option(f.folder, folderLabel(f), f.folder === ch.folder)),
+        ]));
+        body.appendChild(el("select", {
+          "aria-label": "Playback order",
+          onchange: (e) => { ch.order = e.target.value; },
+        }, [option("sequence", "In order", ch.order !== "shuffle-daily"), option("shuffle-daily", "Shuffled daily", ch.order === "shuffle-daily")]));
+        body.appendChild(el("select", {
+          "aria-label": "Scheduling",
+          onchange: (e) => { ch.mode = e.target.value; renderChannels(); },
+        }, [option("continuous", "Always on the air", ch.mode !== "schedule"), option("schedule", "Scheduled hours", ch.mode === "schedule")]));
+        if (ch.mode === "schedule") {
+          body.appendChild(el("select", {
+            "aria-label": "Off-air look",
+            onchange: (e) => { ch.offAir = e.target.value; },
+          }, OFFAIR_OPTIONS.map(([v, label]) => option(v, "Off air: " + label, v === (ch.offAir || "testcard")))));
+        }
+      }
+
+      const rows = [head, body];
+      if (ch.type === "video" && ch.mode === "schedule") {
+        const windowsHost = el("div", { class: "ch-windows" });
+        const windows = ch.schedule || (ch.schedule = []);
+        windows.forEach((w, wi) => {
+          windowsHost.appendChild(el("div", { class: "ch-window" }, [
+            ...DAY_KEYS.map((day, di) =>
+              el("button", {
+                type: "button", class: "day-chip", "aria-pressed": w.days.includes(day) ? "true" : "false",
+                onclick: (e) => {
+                  const on = w.days.includes(day);
+                  w.days = on ? w.days.filter((d) => d !== day) : [...w.days, day];
+                  e.target.setAttribute("aria-pressed", on ? "false" : "true");
+                  renderWeekGrid();
+                },
+              }, DAY_LABELS[di])),
+            el("input", { type: "time", value: w.start || "08:00", "aria-label": "Window start",
+              onchange: (e) => { w.start = e.target.value; renderWeekGrid(); } }),
+            "to",
+            el("input", { type: "time", value: w.end || "11:30", "aria-label": "Window end",
+              onchange: (e) => { w.end = e.target.value; renderWeekGrid(); } }),
+            el("button", { type: "button", class: "icon danger", title: "Remove window", "aria-label": "Remove window",
+              onclick: () => { windows.splice(wi, 1); renderChannels(); } }, "✕"),
+          ]));
+        });
+        windowsHost.appendChild(el("button", {
+          type: "button", class: "small add-row",
+          onclick: () => { windows.push({ days: ["sat"], start: "08:00", end: "11:30" }); renderChannels(); },
+        }, "+ Add window"));
+        rows.push(windowsHost);
+      }
+
+      host.appendChild(el("div", { class: "item ch-item" }, rows));
+    });
+    renderWeekGrid();
+  }
+
+  // The week as the schedule reads: seven day columns, on-air windows drawn
+  // as blocks. The way to catch "the cartoons window is on the wrong day"
+  // without waiting for Saturday.
+  function renderWeekGrid() {
+    const wrap = $("week-grid-wrap");
+    const grid = $("week-grid");
+    const scheduled = channels.filter((c) => c.type === "video" && c.mode === "schedule" && (c.schedule || []).length);
+    if (!scheduled.length) {
+      wrap.hidden = true;
+      return;
+    }
+    wrap.hidden = false;
+    grid.innerHTML = "";
+    grid.appendChild(el("div", null, ""));
+    for (const label of ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]) {
+      grid.appendChild(el("div", { class: "wg-head" }, label));
+    }
+    const hours = el("div", { class: "wg-hours", style: "height:192px" });
+    for (const h of [0, 6, 12, 18, 24]) {
+      hours.appendChild(el("span", { class: "wg-hour", style: "top:" + (h / 24) * 100 + "%" }, String(h)));
+    }
+    grid.appendChild(hours);
+    // The schema expands overnight windows ("SAT 20:00-01:00") into an
+    // evening segment plus a next-morning segment, so they draw as two
+    // blocks the way a printed grid would show them.
+    const segsByDay = [[], [], [], [], [], [], []];
+    for (const ch of scheduled) {
+      for (const w of ch.schedule) {
+        for (const g of (S.windowSegments ? S.windowSegments(w) : [])) {
+          segsByDay[g.day].push({ ch, w, start: g.start, end: g.end });
+        }
+      }
+    }
+    for (let d = 0; d < 7; d++) {
+      const day = el("div", { class: "wg-day" });
+      for (const g of segsByDay[d]) {
+        day.appendChild(el("div", {
+          class: "wg-block",
+          style: "top:" + (g.start / 1440) * 100 + "%;height:" + Math.max(((g.end - g.start) / 1440) * 100, 4) + "%",
+          title: "CH " + g.ch.number + " " + (g.ch.name || "") + "  " + g.w.start + "-" + g.w.end,
+        }, String(g.ch.number)));
+      }
+      grid.appendChild(day);
+    }
   }
 
   // ---------------------------------------------------------- render: rotation
@@ -312,11 +489,34 @@
     crawlFeeds = (crawl.feeds || []).slice();
     pageCycle = (colors.pageCycle && colors.pageCycle.length ? colors.pageCycle : ["blue", "green", "red", "cyan"]).slice();
 
+    channels = (cfg.channels || []).map((c) => JSON.parse(JSON.stringify(c)));
+    const tuner = cfg.tuner || {};
+    const src = tuner.sources || {};
+    $("f-tunerKeyboard").checked = src.keyboard !== false;
+    $("f-tunerGamepad").checked = src.gamepad !== false;
+    $("f-tunerHttp").checked = src.http !== false;
+    $("f-tunerWrap").checked = tuner.wrap !== false;
+
     renderFeeds();
     renderRotation();
     renderMessages();
     renderCrawlFeeds();
     renderPageCycle();
+    renderChannels();
+    refreshChannelFolders();
+  }
+
+  // The folder picker's inventory: what actually sits under channels/, with
+  // file counts and (once probed) total run time. Never a typed path.
+  async function refreshChannelFolders() {
+    try {
+      const r = await fetch("api/channels", { cache: "no-store" });
+      if (!r.ok) return;
+      channelFolders = (await r.json()).folders || [];
+      renderChannels();
+    } catch (e) {
+      /* server-less preview: the picker just shows the configured folder */
+    }
   }
 
   // ---------------------------------------------------------- weather
@@ -504,6 +704,15 @@
         enabled: $("f-cheerEnabled").checked,
         template: $("f-cheerTemplate").value,
       },
+      channels: channels.map((c) => JSON.parse(JSON.stringify(c))),
+      tuner: {
+        sources: {
+          keyboard: $("f-tunerKeyboard").checked,
+          gamepad: $("f-tunerGamepad").checked,
+          http: $("f-tunerHttp").checked,
+        },
+        wrap: $("f-tunerWrap").checked,
+      },
       feeds: feeds.map((f) => ({ id: f.id, label: f.label, url: f.url })),
       rotation: rotation.map((s) => (s.type === "headlines" ? { type: "headlines", feed: s.feed } : { type: s.type })),
       messages: messages.map((m) => ({ text: m.text, color: m.color })),
@@ -573,6 +782,14 @@
       renderRotation();
     });
     $("addMessage").addEventListener("click", () => { messages.push({ text: "", color: null }); renderMessages(); });
+    $("addChannel").addEventListener("click", () => {
+      // Next free number up the dial, starting where cable channels lived.
+      let n = 2;
+      while (channels.some((c) => c.number === n)) n++;
+      if (!channels.length) channels.push({ number: 82, name: "", type: "bulletin", enabled: true });
+      else channels.push({ number: n, name: "", type: "video", enabled: true, folder: "", mode: "continuous", order: "sequence", offAir: "testcard" });
+      renderChannels();
+    });
     $("f-facts").addEventListener("input", updateCounts);
     $("f-dadJokes").addEventListener("input", updateCounts);
     $("wxLookup").addEventListener("click", lookupWx);

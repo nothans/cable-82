@@ -15,3 +15,10 @@ Thumbs.db
 
 # Local tooling artifacts.
 .playwright-mcp/
+
+# Channel video content stays local. A channel is a folder of your own video
+# files under channels/; those files (and the learned .durations.json caches)
+# never belong in the repo. The README documenting the layout is tracked.
+channels/*
+!channels/README.md
+!channels/fetch-demo-channel.js
