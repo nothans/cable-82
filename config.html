@@ -310,6 +310,7 @@
      sub-editor and the week grid. */
   .ch-item { flex-wrap: wrap; }
   .ch-item .ch-head { display: flex; align-items: center; gap: var(--sp-2); width: 100%; }
+  .ch-item .ch-head .toggle { flex-shrink: 0; white-space: nowrap; }
   .ch-item input.ch-number { width: 5.5em; }
   .ch-item input.ch-name { flex: 1; min-width: 8em; }
   .ch-body { width: 100%; display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; padding-left: 2.4em; }
@@ -453,6 +454,15 @@
         <div class="field">
           <div class="toggle"><input type="checkbox" id="f-tunerHttp"><label for="f-tunerHttp">HTTP tuning (/api/tune)</label></div>
           <div class="toggle"><input type="checkbox" id="f-tunerWrap"><label for="f-tunerWrap">Dial wraps at the ends</label></div>
+        </div>
+        <div class="field">
+          <label for="f-tunerCut">Channel change</label>
+          <select id="f-tunerCut">
+            <option value="static">Tuner static (RF tuner, the default)</option>
+            <option value="black">Black screen (a later cable box)</option>
+            <option value="none">Hard cut (no cover)</option>
+          </select>
+          <span class="note">Static and black also give a video channel a beat to load; a hard cut can flash blank.</span>
         </div>
       </div>
     </section>

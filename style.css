@@ -310,6 +310,15 @@ html, body { height: 100%; background: var(--letterbox); }
   image-rendering: pixelated;
 }
 
+/* The other kind of channel change: a blanked raster. */
+#tuner-blank {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: var(--c-ink);
+}
+#tuner-blank[hidden] { display: none; }
+
 /* The channel bug: shown on every tune, fades on its own. */
 #channel-bug {
   position: absolute;

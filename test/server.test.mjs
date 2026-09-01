@@ -425,6 +425,7 @@ test("GET /api/config synthesizes a one-channel dial for a legacy config", async
   assert.equal(j.config.channels[0].number, 82);
   assert.equal(j.config.channels[0].type, "bulletin");
   assert.equal(j.config.tuner.wrap, true);
+  assert.equal(j.config.tuner.cut, "static");
 });
 
 test("schema rejects duplicate channel numbers and sorts the dial", async () => {

@@ -49,16 +49,26 @@ You are on the air.
 (If it prints something else instead, it is telling you why it could not start; see [Troubleshooting](#troubleshooting).)
 
 Out of the box the dial carries one channel: the Community Bulletin Board on 82.
-Want a second channel right now?
-`node channels/fetch-demo-channel.js` downloads a public-domain film lineup, and the control room's Channels panel puts it on the dial - details in [The dial](#the-dial).
+Everything from here - more channels, your name, your messages, your feeds - happens in the control room.
 
-The control room at `http://localhost:1982/config` is where you run the network: your channels, your name, your messages, your feeds, your colors.
-Hit Save and it's on the air within about twenty seconds, no reload.
-(Prefer a text editor? Everything lives in `config.json`; edit it directly and the air still updates.)
+## The control room
 
-## The dial
+Open `http://localhost:1982/config` and the whole network is on one screen: identity, the dial of channels and their schedules, feeds, channel 82's page rotation, community messages, the crawl, colors, and the CRT picture settings.
+Hit Save and it's on the air in about twenty seconds, no reload.
+
+![The CABLE 82 control room at /config: the whole network on one screen](images/config.png)
+
+Every change is validated on the server, written to `config.json`, and picked up on air.
+If `config.json` changes while a control room is open (a hand edit, or a save from another tab), the open screen warns you, and a stale Save is refused instead of overwriting the newer file.
+Everything lives in `config.json`; edit it directly in a text editor and the air still updates.
+The keys are listed in the [configuration reference](#configuration-reference-configjson).
+
+## Channels
 
 A dial of channels you flip through with a keyboard, a USB gamepad or joystick, or an HTTP call, all inside the one browser that's already on the air.
+The control room's Channels panel is where you build it: add a channel, give it a number and a name, pick its type, and it's on the dial.
+
+![The Channels panel in the control room: three channels on the dial, and the tuner settings including what covers a channel change](images/config-channels.png)
 
 Three kinds of channel:
 
@@ -78,8 +88,11 @@ Tuning:
 - **HTTP** - `POST /api/tune` with `{"cmd":"up"}`, `{"cmd":"down"}`, or `{"cmd":"set","channel":2}`. GPIO buttons, a Stream Deck, or anything that can make a request becomes a remote control.
 
 Channel changes cover the cut with a beat of tuner static, then show a channel banner, exactly like a rented cable box.
+If the box you grew up with went black between channels instead, set `tuner.cut` to `black` in the control room (`none` is a hard cut).
 The tune API is meant for your LAN and is deliberately unauthenticated - anyone on your network can change the channel, which is also how a living room works.
 Don't expose it to the internet.
+
+### Tuner API
 
 The server also offers `GET /api/channels`, the folder inventory.
 For anyone building their own tuner source or listener (the bus carries events, not state, so a remote never fights the buttons):
@@ -130,16 +143,9 @@ Turn it off, or make the message yours, in the control room - or in `config.json
 }
 ```
 
-## Configuration (control room or `config.json`)
+## Configuration reference (`config.json`)
 
-The control room at `/config` is the friendly way in: one screen with the whole network - identity, the dial of channels and their schedules, feeds, channel 82's page rotation, community messages, the crawl, and colors.
-Every change is validated on the server, written to `config.json`, and picked up on air.
-If `config.json` changes while a control room is open (a hand edit, or a save from another tab), the open screen warns you, and a stale Save is refused instead of overwriting the newer file.
-
-![The CABLE 82 control room at /config: the whole network on one screen](images/config.png)
-
-`config.json` is the file underneath, and you can hand-edit it just as happily.
-The keys:
+Everything the control room edits lives in `config.json`, and you can hand-edit it just as well.
 
 | Key | What it does | Default |
 | --- | --- | --- |
@@ -147,7 +153,7 @@ The keys:
 | `timeFormat` | `"12h"` or `"24h"` | `12h` |
 | `port` | Server port | `1982` |
 | `channels` | The dial: `{ number, name, type, enabled }` plus per-type fields - video channels add `folder`, `order` (`sequence`/`shuffle-daily`), `mode` (`continuous`/`schedule`), `schedule` windows (`{ days, start, end }`), and `offAir` (`testcard`/`bars`/`snow`/`bulletin`); external channels add `url`. Empty means the board alone as channel 82 | the board on 82 |
-| `tuner` | Which tuning inputs are live (`sources.keyboard`, `sources.gamepad`, `sources.http`) and whether the dial wraps at the ends (`wrap`) | all on, wraps |
+| `tuner` | Which tuning inputs are live (`sources.keyboard`, `sources.gamepad`, `sources.http`), whether the dial wraps at the ends (`wrap`), and what covers a channel change (`cut`: `static`/`black`/`none`) | all on, wraps, static |
 | `rotation` | Channel 82's page lineup, in order (`clock`, `messages`, `facts`, `dadjokes`, `weather`, `headlines`) | see file |
 | `pageSeconds` | Seconds per page | `12` |
 | `feeds` | RSS/Atom feeds: `{ id, label, url }`. The server only ever fetches these URLs | WBUR, Hacker News, nothans.com |

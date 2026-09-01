@@ -414,7 +414,11 @@
     return out;
   }
 
-  // The tuner: which input sources are live, and whether the dial wraps.
+  // The tuner: which input sources are live, whether the dial wraps, and
+  // what covers a channel change. "static" is an RF tuner slewing between
+  // carriers; "black" is the blanked raster of a later cable box; "none" is
+  // a hard cut.
+  const CUT_STYLES = ["static", "black", "none"];
   function validateTuner(raw) {
     const t = raw && typeof raw === "object" ? raw : {};
     const src = t.sources && typeof t.sources === "object" ? t.sources : {};
@@ -426,6 +430,7 @@
         http: on(src.http, true),
       },
       wrap: on(t.wrap, true),
+      cut: CUT_STYLES.includes(t.cut) ? t.cut : "static",
     };
   }
 

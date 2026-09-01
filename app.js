@@ -867,6 +867,7 @@
         external: document.getElementById("external-layer"),
         snow: document.getElementById("tuner-snow"),
         bug: document.getElementById("channel-bug"),
+        blank: document.getElementById("tuner-blank"),
         bugNumber: document.getElementById("bug-number"),
         bugName: document.getElementById("bug-name"),
       };
@@ -876,6 +877,7 @@
       const bulletin = startChannel(cfg, bootVersion);
 
       // ---------------- static (shared by transitions and off-air snow)
+      // and the blank raster, for the cable boxes that went black instead.
       const sctx = L.snow.getContext("2d");
       let snowLoop = null;
       let snowHold = 0;
@@ -903,6 +905,16 @@
           L.snow.hidden = true;
         }
       }
+      function blankShow() { L.blank.hidden = false; }
+      function blankHide() { L.blank.hidden = true; }
+
+      // What covers the swap, and for how long: ms of cover before the
+      // swap, then ms after it so the new channel has its first frame up.
+      const CUTS = {
+        static: { show: snowShow, hide: snowHide, before: 220, after: 120 },
+        black: { show: blankShow, hide: blankHide, before: 300, after: 200 },
+        none: { show: () => {}, hide: () => {}, before: 0, after: 0 },
+      };
 
       // ---------------- the channel bug
       function banner(numberText, nameText) {
@@ -1289,20 +1301,21 @@
           return;
         }
         tuning = true;
-        snowShow(); // static covers the whole swap
+        const cut = CUTS[cfg.tuner.cut] || CUTS.static;
+        cut.show(); // the cover stays up across the whole swap
         setTimeout(() => {
-          // A throw in the swap must never strand the tuner: snow down and
+          // A throw in the swap must never strand the tuner: cover down and
           // tuning cleared no matter what, or no key would ever work again.
           try {
             applyChannel(i);
             banner(dial[i].number, dial[i].name);
           } finally {
             setTimeout(() => {
-              snowHide();
+              cut.hide();
               tuning = false;
-            }, 120);
+            }, cut.after);
           }
-        }, 220);
+        }, cut.before);
       }
 
       const step = (dir) => tuneToIndex(nextChannelIndex(dial, dialIndex, dir, cfg.tuner.wrap));

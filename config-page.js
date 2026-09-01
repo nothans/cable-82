@@ -496,6 +496,7 @@
     $("f-tunerGamepad").checked = src.gamepad !== false;
     $("f-tunerHttp").checked = src.http !== false;
     $("f-tunerWrap").checked = tuner.wrap !== false;
+    $("f-tunerCut").value = tuner.cut || "static";
 
     renderFeeds();
     renderRotation();
@@ -712,6 +713,7 @@
           http: $("f-tunerHttp").checked,
         },
         wrap: $("f-tunerWrap").checked,
+        cut: $("f-tunerCut").value,
       },
       feeds: feeds.map((f) => ({ id: f.id, label: f.label, url: f.url })),
       rotation: rotation.map((s) => (s.type === "headlines" ? { type: "headlines", feed: s.feed } : { type: s.type })),
