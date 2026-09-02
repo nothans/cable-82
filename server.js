@@ -36,6 +36,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { pipeline } = require("node:stream");
+const { execFileSync } = require("node:child_process");
 const SCHEMA = require("./config-schema.js");
 
 const ROOT = __dirname;
@@ -57,6 +58,32 @@ function displayBuild() {
   return h.digest("hex").slice(0, 12);
 }
 const DISPLAY_BUILD = displayBuild();
+
+const REPO_URL = "https://github.com/nothans/cable-82";
+
+// What release is this? `git describe` names the tag when the checkout sits on
+// one (v0.4.0), and says how far past it we are otherwise
+// (v0.4.0-3-gabc1234, plus -dirty for local edits). A zip download has no .git
+// and no answer, so the control room says "unknown version" rather than
+// pretending. Read once at startup: it cannot change without a restart, and
+// the release check on the roadmap wants the same fact.
+function releaseVersion() {
+  const git = (args) =>
+    execFileSync("git", args, { cwd: ROOT, encoding: "utf8", timeout: 2000, stdio: ["ignore", "pipe", "ignore"] }).trim();
+  try {
+    // Git searches upwards, so a copy of this folder sitting inside somebody
+    // else's repo would answer with that repo's tags. Only trust the answer
+    // when the checkout root is this folder.
+    const top = path.resolve(git(["rev-parse", "--show-toplevel"]));
+    if (top.toLowerCase() !== path.resolve(ROOT).toLowerCase()) return null;
+    return git(["describe", "--tags", "--dirty", "--always"]) || null;
+  } catch (e) {
+    return null;
+  }
+}
+const VERSION = releaseVersion();
+// A clean checkout of a release: safe to link straight at that release's page.
+const RELEASE_TAG = VERSION && /^v\d+\.\d+\.\d+$/.test(VERSION) ? VERSION : null;
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -765,6 +792,11 @@ function createApp(opts = {}) {
         handleGeocode(u.searchParams.get("q"), res).catch((e) => send(res, 500, "SERVER ERROR: " + e.message));
         return;
       }
+      if (pathname === "/api/version") {
+        res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+        res.end(JSON.stringify({ version: VERSION, release: RELEASE_TAG, build: DISPLAY_BUILD, repo: REPO_URL }));
+        return;
+      }
       if (pathname === "/api/music") {
         handleMusic(res);
         return;
@@ -857,4 +889,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { createApp, listenUrls, naturalCompare, displayBuild };
+module.exports = { createApp, listenUrls, naturalCompare, displayBuild, releaseVersion };

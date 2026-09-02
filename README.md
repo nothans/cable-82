@@ -22,6 +22,7 @@ Resources:
 
 - Original build story: [CABLE 82 on nothans.com](https://nothans.com/cable-82-turn-a-raspberry-pi-and-an-old-crt-into-a-1982-cable-bulletin-board-channel)
 - Step-by-step build tutorial: [from a blank SD card to channel 3](https://nothans.com/cable-82-tv-channel-build-tutorial-rasbperry-pi-3-b-and-old-crt-tv)
+- Explainer video: [Run Your Own Cable Network Like it is 1982](https://www.youtube.com/watch?v=KROAE0mn7vo)
 - One-minute video: [CABLE 82 on the air](https://www.youtube.com/watch?v=d5Jcfx5oN0A)
 - Community Bulletin Board demo video: [the full six-minute demo](https://www.youtube.com/watch?v=0YEvI_oFfqY)
 
@@ -56,10 +57,18 @@ Everything from here - more channels, your name, your messages, your feeds - hap
 
 ## The control room
 
-Open `http://localhost:1982/config` and the whole network is on one screen: identity, the dial of channels and their schedules, feeds, channel 82's page rotation, community messages, the crawl, colors, and the CRT picture settings.
-Hit Save and it's on the air in about twenty seconds, no reload.
+Open `http://localhost:1982/config` and the whole network is on one screen, in the order you would set a station up:
 
-![The CABLE 82 control room at /config: the whole network on one screen](images/config.png)
+1. **Server** - the port it answers on, and the release it is running.
+2. **Display** - the set: CRT mode, text size, overscan, clock format, and the daily reload that keeps a kiosk healthy.
+3. **Channels** - the dial and its schedules, and how the dial is turned.
+4. **Community board** - everything on channel 82: its name and tagline, the page rotation, messages, facts and jokes, weather, feeds, the crawl, CheerLights, music, colors.
+
+The bar under the masthead jumps between the four groups and follows you as you scroll, and `#server`, `#display`, `#channels`, and `#board` are links you can bookmark.
+It is one page with one Save, so a change anywhere goes out in the same click, on the air in about twenty seconds, no reload.
+The masthead also carries the release you are running, linked to its notes, and links to the display and the remote.
+
+![The CABLE 82 control room at /config: the Server and Display groups, with the section bar and the release version in the masthead](images/config.png)
 
 Every change is validated on the server, written to `config.json`, and picked up on air.
 If `config.json` changes while a control room is open (a hand edit, or a save from another tab), the open screen warns you, and a stale Save is refused instead of overwriting the newer file.
@@ -69,9 +78,9 @@ The keys are listed in the [configuration reference](#configuration-reference-co
 ## Channels
 
 A dial of channels you flip through with a keyboard, a USB gamepad or joystick, or an HTTP call, all inside the one browser that's already on the air.
-The control room's Channels panel is where you build it: add a channel, give it a number and a name, pick its type, and it's on the dial.
+The control room's Channels group is where you build it: add a channel, give it a number and a name, pick its type, and it's on the dial.
 
-![The Channels panel in the control room: three channels on the dial, and the tuner settings including what covers a channel change](images/config-channels.png)
+![The Channels group in the control room: four channels on the dial, one of them taking commercial breaks from a second folder, and the Tuning panel below](images/config-channels.png)
 
 Three kinds of channel:
 
@@ -113,6 +122,7 @@ For anyone building their own tuner source or listener (the bus carries events, 
 - `GET /api/tune` answers `{"seq":N,"last":{...},"listeners":N}` - the last command and how many displays are listening, useful for checking a remote is wired up. It never reports a current channel, because the server doesn't hold one.
 - `GET /api/events` emits `hello` (`{"seq":N,"build":"..."}`, your baseline on connect and reconnect; `build` is a hash of the display files, and a display that reconnects to a different one reloads), `tune` (a command with its `seq` - apply each seq once), and `config` (`{"version":...}` after a control-room save - the display reloads on it).
 - Both tune endpoints answer 403 while HTTP tuning is switched off in the control room.
+- `GET /api/version` answers `{"version":"v0.4.0","release":"v0.4.0","build":"...","repo":"..."}` - what release this install is running, read from the checkout once at startup. `release` is set only when the checkout sits exactly on a tag; both are `null` for a zip download or a copy vendored inside another repo, rather than a guessed version.
 - `POST /api/channels/durations` is internal - the display reporting probed video durations back to the server's cache. It requires the same `x-cable82-config: 1` header as config saves.
 
 ## Channel 82: the Community Bulletin Board
@@ -352,7 +362,7 @@ The old `enable_tvout` / `sdtv_mode` / `sdtv_aspect` lines you will find in olde
 
 ### 5. Tune it in the control room
 
-Open the **CRT** panel in the control room:
+Open the **Picture** panel, under Display, in the control room:
 
 - **CRT mode** swaps in a softer palette and drops the drop shadow.
   Composite and RF smear saturated red and blue and clip pure white; this calms both.
@@ -413,7 +423,7 @@ The `192.168.1.42` in these docs is an example, not your Pi's address.
 
 **The picture is there but the text is smeared or the colors bleed.**
 That is NTSC doing what it does to saturated color and small type.
-Turn on CRT mode and raise Text size in the control room's CRT panel, then fine-tune the TV; a 1980s tuner drifts, and cheap modulators sit slightly off the carrier.
+Turn on CRT mode and raise Text size in the control room's Picture panel, then fine-tune the TV; a 1980s tuner drifts, and cheap modulators sit slightly off the carrier.
 
 **No sound through the HDMI modulator.**
 The Pi refuses HDMI audio unless the screen's EDID says it can hear, and cheap modulators send no EDID.

@@ -13,7 +13,7 @@ Then open the control room, add a Video channel, and pick the `retro-tv` folder.
 
 ## Your own channels
 
-Each subfolder is one channel's library: drop video files in, point a channel at the folder from the control room's Channels panel, and it's on the dial.
+Each subfolder is one channel's library: drop video files in, point a channel at the folder from the control room's Channels group, and it's on the dial.
 
 ```
 channels/
@@ -27,7 +27,7 @@ Schedules, off-air cards, and the tuner are covered in the main README's [Channe
 
 ## How it works
 
-- **Folder = channel.** The Channels panel lists these folders in a picker; you never type a path.
+- **Folder = channel.** The dial lists these folders in a picker; you never type a path.
 - **Order.** Files sort naturally (digit runs compare as numbers, so `E2` comes before `E10`); name files in airing order, e.g. `S01.E01.mp4`. Or set the channel to *Shuffled daily*: a fresh order each day, seeded by the date, so it holds all day and reshuffles tomorrow.
 - **Broadcast, not playback.** The channel's position is computed from the wall clock, so tuning away and back lands you mid-program. Nothing ever "resumes where you left off" - that's a VCR, not a channel.
 - **Formats.** `.mp4`, `.m4v`, `.webm`, `.ogv`, `.mov`. On a Pi 3 B+, H.264 up to ~480p plays comfortably in software; test anything bigger.

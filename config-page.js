@@ -133,7 +133,7 @@
   }
 
   function renderChannels() {
-    const host = $("channels");
+    const host = $("channelList");
     host.innerHTML = "";
     if (!channels.length) {
       host.appendChild(el("div", { class: "empty" }, "No channels: the board runs alone as channel 82. Add one to grow the dial."));
@@ -820,6 +820,70 @@
     }
   }
 
+  // ------------------------------------------------- version + navigation
+
+  // What release is this? The server reads it from the checkout at startup.
+  // A zip download or a folder vendored inside another repo has no answer,
+  // and says so rather than guessing.
+  async function loadVersion() {
+    const chip = $("version");
+    const line = $("releaseVersion");
+    const note = $("releaseNote");
+    let v = null;
+    try {
+      const r = await fetch("api/version", { cache: "no-store" });
+      if (r.ok) v = await r.json();
+    } catch (e) {
+      /* offline or an older server: say unknown rather than guess */
+    }
+    const repo = (v && v.repo) || "https://github.com/nothans/cable-82";
+    $("releaseRepo").href = repo;
+    if (!v || !v.version) {
+      chip.textContent = "version unknown";
+      chip.href = repo;
+      chip.title = "This install is not a checkout of a release, so it cannot name a version.";
+      line.textContent = "unknown";
+      note.textContent = v
+        ? "No release to read: this is a copy of the files, not a checkout. Build " + v.build + "."
+        : "The server did not answer.";
+      return;
+    }
+    chip.textContent = v.version;
+    chip.href = v.release ? repo + "/releases/tag/" + v.release : repo;
+    chip.title = v.release ? "Release " + v.release : "Ahead of the last release";
+    line.textContent = v.version;
+    note.textContent = v.release
+      ? "Build " + v.build + ". A clean checkout of this release."
+      : "Build " + v.build + ". Past the last tag, or with local edits.";
+  }
+
+  // The group nav follows the scroll, so the progression is always placed.
+  function wireGroupNav() {
+    const head = document.querySelector("header.masthead");
+    const links = Array.from(document.querySelectorAll(".groupnav a"));
+    const groups = links
+      .map((a) => document.getElementById(a.getAttribute("href").slice(1)))
+      .filter(Boolean);
+    if (!groups.length) return;
+    const setHeadHeight = () =>
+      document.documentElement.style.setProperty("--head-h", head.offsetHeight + 16 + "px");
+    setHeadHeight();
+    addEventListener("resize", setHeadHeight);
+    const mark = (id) => links.forEach((a) => a.classList.toggle("on", a.getAttribute("href") === "#" + id));
+    // Whichever group covers the top of the reading area wins; at the very
+    // bottom of the page the last one does, since it may be too short to reach.
+    const spy = () => {
+      const top = head.offsetHeight + 24;
+      let current = groups[0].id;
+      for (const g of groups) if (g.getBoundingClientRect().top <= top) current = g.id;
+      if (innerHeight + scrollY >= document.body.scrollHeight - 4) current = groups[groups.length - 1].id;
+      mark(current);
+    };
+    spy();
+    addEventListener("scroll", spy, { passive: true });
+    mark((location.hash || "#" + groups[0].id).slice(1));
+  }
+
   // ---------------------------------------------------------- wire up
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -842,6 +906,8 @@
     $("wxLookup").addEventListener("click", lookupWx);
     $("wxSearch").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); lookupWx(); } });
     $("f-musicVolume").addEventListener("input", updateVolumeOut);
+    wireGroupNav();
+    loadVersion();
     $("save").addEventListener("click", save);
     $("revert").addEventListener("click", load);
     load();

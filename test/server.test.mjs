@@ -6,10 +6,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
-const { createApp, listenUrls, displayBuild } = require("../server.js");
+const { createApp, listenUrls, displayBuild, releaseVersion } = require("../server.js");
 
 // ---------- upstream mock (the "internet") ----------
 
@@ -396,6 +397,42 @@ test("GET /api/music lists only audio files, sorted", async () => {
   const j = await r.json();
   assert.deepEqual(j.tracks.map((t) => t.file), ["a-track.mp3", "b-track.ogg", "c-track.wav"]);
   assert.ok(j.tracks[0].url.startsWith("music/"), "url points into the music folder");
+});
+
+test("GET /api/version reports the release, the build, and the repo", async () => {
+  const r = await fetch(base + "/api/version");
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.match(j.build, /^[0-9a-f]{12}$/);
+  assert.equal(j.repo, "https://github.com/nothans/cable-82");
+  // Either a real checkout (a describe string, with `release` set only when it
+  // sits exactly on a tag) or no checkout at all, which is what a zip download
+  // looks like. Never a guess.
+  if (j.version === null) assert.equal(j.release, null);
+  else assert.equal(typeof j.version, "string");
+  if (j.release !== null) assert.match(j.release, /^v\d+\.\d+\.\d+$/);
+});
+
+test("releaseVersion only answers for a checkout of this project", () => {
+  // Git searches upwards, so a copy vendored inside a parent repo would
+  // otherwise report that repo's tags as CABLE 82's release. This holds either
+  // way: a real checkout of the project answers, anything else says nothing.
+  const projectRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const v = releaseVersion();
+  let top = null;
+  try {
+    top = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd: projectRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch (e) {
+    /* not a checkout at all */
+  }
+  const ownCheckout =
+    top !== null && path.resolve(top).toLowerCase() === path.resolve(projectRoot).toLowerCase();
+  if (ownCheckout) assert.equal(typeof v, "string", "a checkout of the project names its version");
+  else assert.equal(v, null, "a vendored or unpacked copy claims no version");
 });
 
 test("GET /api/weather returns normalized current conditions", async () => {
