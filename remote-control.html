@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1b1c22">
+<title>CABLE 82 - Remote Control</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="stylesheet" href="remote-control.css">
+</head>
+<body>
+<main id="stage">
+  <!-- Four keys, no display, no state: every press is an event on the tuner
+       bus (POST /api/tune) and the set does the remembering, the way the
+       ultrasonic original worked. -->
+  <div id="remote" role="group" aria-label="CABLE 82 remote control">
+    <div id="medallion" aria-hidden="true"><span>82</span></div>
+    <div id="plate">
+      <div id="keys">
+        <button type="button" class="key" data-cmd="down" aria-label="Channel lower">
+          <span class="label">Channel<small>Lower</small></span>
+          <span class="well"><span class="cap"></span></span>
+        </button>
+        <button type="button" class="key" data-cmd="volume" aria-label="Volume: loud, off, soft, medium">
+          <span class="label">Volume</span>
+          <span class="well"><span class="cap"></span></span>
+        </button>
+        <button type="button" class="key key-power" data-cmd="power" aria-label="Off-On">
+          <span class="label">Off-On</span>
+          <span class="well"><span class="cap"></span></span>
+        </button>
+        <button type="button" class="key" data-cmd="up" aria-label="Channel higher">
+          <span class="label">Channel<small>Higher</small></span>
+          <span class="well"><span class="cap"></span></span>
+        </button>
+      </div>
+      <div id="brand">
+        <div id="wordmark">CABLE 82</div>
+        <div id="subline">Remote Control</div>
+      </div>
+    </div>
+  </div>
+  <p id="status" role="status" aria-live="polite">Tap a key.</p>
+  <p id="foot"><a href="config">Control room</a></p>
+</main>
+<script src="remote-control.js"></script>
+</body>
+</html>

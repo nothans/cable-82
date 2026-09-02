@@ -219,6 +219,19 @@
     return next;
   }
 
+  // The sound levels a volume key steps through, in the order the Zenith
+  // Space Command stepped its motorized control: loud, off, soft, medium,
+  // back to loud. One key, no state on the remote: the set remembers.
+  const VOLUME_STEPS = [
+    { level: 1, name: "LOUD" },
+    { level: 0, name: "SOUND OFF" },
+    { level: 0.35, name: "SOFT" },
+    { level: 0.7, name: "MEDIUM" },
+  ];
+  function nextVolumeStep(i) {
+    return (Number.isInteger(i) && i >= 0 && i < VOLUME_STEPS.length ? i + 1 : 1) % VOLUME_STEPS.length;
+  }
+
   // Interleave items across feeds: news1, tech1, blog1, news2, ...
   // extras ride at the front of each pass (the CheerLights color, say).
   function buildCrawlText(opts) {
@@ -315,6 +328,8 @@
     seededShuffle,
     airState,
     nextChannelIndex,
+    VOLUME_STEPS,
+    nextVolumeStep,
     stats: statsSnapshot,
   };
 
@@ -373,6 +388,8 @@
     let suspended = false;
     let musicAudio = null;
     let musicBegin = null; // starts playback; a no-op after the first call
+    let soundLevel = 1; // the tuner's volume key, 0..1, over the configured music volume
+    const musicVolume = () => Math.min(1, Math.max(0, cfg.music.volume / 100)) * soundLevel;
     const soak = new URLSearchParams(location.search).has("soak");
     if (soak) {
       cfg.pageSeconds = 0.2;
@@ -525,7 +542,7 @@
           const audio = new Audio();
           musicAudio = audio;
           if (suspended) audio.muted = true; // born while another channel shows
-          audio.volume = Math.min(1, Math.max(0, cfg.music.volume / 100));
+          audio.volume = musicVolume();
           audio.preload = "auto";
           function playNext() {
             if (idx >= order.length) {
@@ -847,6 +864,10 @@
         }
         advancePage(); // fresh page the moment the board is back
       },
+      setSoundLevel(level) {
+        soundLevel = level;
+        if (musicAudio) musicAudio.volume = musicVolume();
+      },
     };
     } // startChannel
 
@@ -868,9 +889,18 @@
         snow: document.getElementById("tuner-snow"),
         bug: document.getElementById("channel-bug"),
         blank: document.getElementById("tuner-blank"),
+        power: document.getElementById("power-off"),
         bugNumber: document.getElementById("bug-number"),
         bugName: document.getElementById("bug-name"),
       };
+
+      // The set's own state: the volume key's step and whether the picture
+      // is on. Both survive a page reload (a config save, the daily reload)
+      // and reset when the box is power-cycled, like a TV with a memory.
+      let volumeStep = Number(sessionStorage.getItem("cable82.tuner.volume"));
+      if (!Number.isInteger(volumeStep) || volumeStep < 0 || volumeStep >= VOLUME_STEPS.length) volumeStep = 0;
+      let powered = sessionStorage.getItem("cable82.tuner.power") !== "off";
+      const soundLevel = () => VOLUME_STEPS[volumeStep].level;
 
       // The board always boots: it is the home channel and it owns the
       // header, crawl, feeds and music. Other channels cover it, suspended.
@@ -917,14 +947,15 @@
       };
 
       // ---------------- the channel bug
-      function banner(numberText, nameText) {
-        L.bugNumber.textContent = "CH " + numberText;
-        L.bugName.textContent = nameText || "";
+      function notice(bigText, smallText) {
+        L.bugNumber.textContent = bigText;
+        L.bugName.textContent = smallText || "";
         L.bug.hidden = false;
         L.bug.classList.remove("fading");
-        clearTimeout(banner._t);
-        banner._t = setTimeout(() => L.bug.classList.add("fading"), 2600);
+        clearTimeout(notice._t);
+        notice._t = setTimeout(() => L.bug.classList.add("fading"), 2600);
       }
+      const banner = (numberText, nameText) => notice("CH " + numberText, nameText);
 
       // ---------------- off-air card
       let cardTimer = null;
@@ -1046,6 +1077,7 @@
         standby.muted = true;
         standby.hidden = true;
         vid.muted = false;
+        vid.volume = soundLevel();
         vid.hidden = false;
       }
 
@@ -1092,6 +1124,7 @@
         currentUrl = "";
         degIndex = -1;
         vid.muted = false;
+        vid.volume = soundLevel();
         vid.hidden = false;
         standby.muted = true;
         standby.hidden = true;
@@ -1322,7 +1355,7 @@
       }
 
       function tuneToIndex(i, opts) {
-        if (tuning || i < 0 || i >= dial.length) return;
+        if (!powered || tuning || i < 0 || i >= dial.length) return;
         if (i === dialIndex && !(opts && opts.force)) {
           banner(dial[i].number, dial[i].name);
           return;
@@ -1334,8 +1367,10 @@
           // A throw in the swap must never strand the tuner: cover down and
           // tuning cleared no matter what, or no key would ever work again.
           try {
-            applyChannel(i);
-            banner(dial[i].number, dial[i].name);
+            if (powered) {
+              applyChannel(i);
+              banner(dial[i].number, dial[i].name);
+            }
           } finally {
             setTimeout(() => {
               cut.hide();
@@ -1347,9 +1382,49 @@
 
       const step = (dir) => tuneToIndex(nextChannelIndex(dial, dialIndex, dir, cfg.tuner.wrap));
       function setNumber(n) {
+        if (!powered) return;
         const i = dial.findIndex((c) => c.number === n);
         if (i >= 0) tuneToIndex(i);
         else banner(n, "NO SUCH CHANNEL");
+      }
+
+      // The volume key: one step around VOLUME_STEPS, applied to whatever is
+      // making sound (the program on the air, the board's music bed).
+      function applySound() {
+        for (const b of vidBufs) b.volume = soundLevel();
+        bulletin.setSoundLevel(soundLevel());
+      }
+      function volumeKey() {
+        if (!powered) return;
+        volumeStep = nextVolumeStep(volumeStep);
+        try { sessionStorage.setItem("cable82.tuner.volume", String(volumeStep)); } catch (e) { /* fine */ }
+        applySound();
+        notice("VOLUME", VOLUME_STEPS[volumeStep].name);
+      }
+
+      // The power key. Off is a dark screen and silence: the channel's view
+      // is stopped (the board suspended, video unloaded) and a dark layer
+      // covers the stage. The broadcast clock keeps running underneath, so
+      // on resumes the channel wherever it is now, the way a TV comes back
+      // to a program already in progress. The dial is not touched; the set
+      // remembers its channel. Every other key is dead while it is off.
+      function powerKey() {
+        if (powered) {
+          powered = false;
+          for (const s of activeStops.splice(0)) {
+            try { s(); } catch (e) { /* keep stopping */ }
+          }
+          bulletin.suspend(); // the board has no stop of its own: it is the floor
+          clearTimeout(notice._t);
+          L.bug.hidden = true;
+          L.power.hidden = false;
+        } else {
+          powered = true;
+          L.power.hidden = true;
+          applyChannel(dialIndex);
+          banner(dial[dialIndex].number, dial[dialIndex].name);
+        }
+        try { sessionStorage.setItem("cable82.tuner.power", powered ? "on" : "off"); } catch (e) { /* fine */ }
       }
 
       // ---------------- tuner sources (events, not state)
@@ -1357,6 +1432,7 @@
       let digits = "";
       let digitTimer = null;
       function pushDigit(d) {
+        if (!powered) return;
         digits = (digits + d).slice(0, 3);
         banner(digits, "");
         clearTimeout(digitTimer);
@@ -1410,10 +1486,20 @@
       // and is applied exactly once; the server never asserts a current
       // channel, so a remote source can never fight a local one.
       let lastSeq = 0;
+      let bootBuild = null;
       try {
         const es = new EventSource("api/events");
         es.addEventListener("hello", (ev) => {
-          try { lastSeq = JSON.parse(ev.data).seq || 0; } catch (e) { /* fine */ }
+          let hello;
+          try { hello = JSON.parse(ev.data); } catch (e) { return; }
+          lastSeq = hello.seq || 0;
+          // The first hello names the build this page came from. The browser
+          // reconnects on its own after a server restart, and a hello naming a
+          // different build means the files changed under us (git pull +
+          // restart): reload onto them. The clock puts the program back.
+          if (!hello.build) return;
+          if (bootBuild == null) bootBuild = hello.build;
+          else if (hello.build !== bootBuild) location.reload();
         });
         es.addEventListener("tune", (ev) => {
           let evt;
@@ -1423,6 +1509,8 @@
           if (evt.cmd === "up") step(+1);
           else if (evt.cmd === "down") step(-1);
           else if (evt.cmd === "set") setNumber(evt.channel);
+          else if (evt.cmd === "volume") volumeKey();
+          else if (evt.cmd === "power") powerKey();
         });
         es.addEventListener("config", () => location.reload());
       } catch (e) {
@@ -1430,8 +1518,14 @@
       }
 
       // ---------------- sign on
-      applyChannel(dialIndex);
-      if (dial.length > 1) banner(dial[dialIndex].number, dial[dialIndex].name);
+      applySound();
+      if (powered) {
+        applyChannel(dialIndex);
+        if (dial.length > 1) banner(dial[dialIndex].number, dial[dialIndex].name);
+      } else {
+        bulletin.suspend(); // switched off before the reload: stay dark and silent
+        L.power.hidden = false;
+      }
     } // startTuner
   });
 

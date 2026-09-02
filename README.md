@@ -13,6 +13,7 @@ Features:
 - **Video channels** - place videos in a folder to define your own channel, like a Saturday-morning cartoon lineup or old 50s movies.
 - **External channels** - point a channel at a website to create a channel out of anything.
 - **Flexible tuning** - anything that can trigger a key press, a button press, a GPIO pin, or an HTTP request to the API can change the channel.
+- **Remote control** (`/remote-control`) - a Zenith Space Command drawn in CSS: channel lower, volume, off-on, channel higher, on your phone.
 - **Control Room** (`/config`) - where you tune CABLE 82 to be what you want; fully customizable and extendable, everything stored in one `config.json` file.
 - **Made for CRTs** - 4:3 formatting, per-axis overscan margins, and a broadcast-safe palette.
 
@@ -42,6 +43,7 @@ CABLE 82 broadcasting
   http://localhost:1982   (a browser on this machine)
   http://192.168.1.42:1982   (a browser on another device on your network)
 Control room: http://localhost:1982/config
+Remote control: http://192.168.1.42:1982/remote-control   (open it on your phone)
 ```
 
 Open the first one in a browser on the same machine, or the second one from a laptop or phone on the same Wi-Fi.
@@ -85,7 +87,10 @@ Tuning:
 
 - **Keyboard** - arrows or PageUp/PageDown to change channel, digits plus Enter to jump straight to a number.
 - **Gamepad** - a USB NES-style controller: up/down on the pad changes channel, Select jumps home to the board.
-- **HTTP** - `POST /api/tune` with `{"cmd":"up"}`, `{"cmd":"down"}`, or `{"cmd":"set","channel":2}`. GPIO buttons, a Stream Deck, or anything that can make a request becomes a remote control.
+- **Remote control** - open `/remote-control` on a phone: four keys styled after the 1960s Zenith Space Command, channel lower, volume, off-on, channel higher. The volume key steps loud, sound off, soft, medium, back to loud, like the motorized original. Off-on darkens the set; the broadcast clock keeps running, so on comes back to the program already in progress. The set remembers its volume and power state across a reload.
+- **HTTP** - `POST /api/tune` with `{"cmd":"up"}`, `{"cmd":"down"}`, `{"cmd":"set","channel":2}`, `{"cmd":"volume"}`, or `{"cmd":"power"}`. GPIO buttons, a Stream Deck, or anything that can make a request becomes a remote control.
+
+![The remote control at /remote-control on a phone: a chrome Zenith Space Command with four keys](images/remote-control.png)
 
 Channel changes cover the cut with a beat of tuner static, then show a channel banner, exactly like a rented cable box.
 If the box you grew up with went black between channels instead, set `tuner.cut` to `black` in the control room (`none` is a hard cut).
@@ -97,9 +102,9 @@ Don't expose it to the internet.
 The server also offers `GET /api/channels`, the folder inventory.
 For anyone building their own tuner source or listener (the bus carries events, not state, so a remote never fights the buttons):
 
-- `POST /api/tune` takes `{"cmd":"up"}`, `{"cmd":"down"}`, or `{"cmd":"set","channel":N}` and answers `{"ok":true,"seq":N,"listeners":N}`.
+- `POST /api/tune` takes `{"cmd":"up"}`, `{"cmd":"down"}`, `{"cmd":"set","channel":N}`, `{"cmd":"volume"}` (one step around the volume cycle), or `{"cmd":"power"}` (toggle the picture off and on) and answers `{"ok":true,"seq":N,"listeners":N}`. Volume and power are events too: the display holds the level and the on/off state, not the server.
 - `GET /api/tune` answers `{"seq":N,"last":{...},"listeners":N}` - the last command and how many displays are listening, useful for checking a remote is wired up. It never reports a current channel, because the server doesn't hold one.
-- `GET /api/events` emits `hello` (`{"seq":N}`, your baseline on connect and reconnect), `tune` (a command with its `seq` - apply each seq once), and `config` (`{"version":...}` after a control-room save - the display reloads on it).
+- `GET /api/events` emits `hello` (`{"seq":N,"build":"..."}`, your baseline on connect and reconnect; `build` is a hash of the display files, and a display that reconnects to a different one reloads), `tune` (a command with its `seq` - apply each seq once), and `config` (`{"version":...}` after a control-room save - the display reloads on it).
 - Both tune endpoints answer 403 while HTTP tuning is switched off in the control room.
 - `POST /api/channels/durations` is internal - the display reporting probed video durations back to the server's cache. It requires the same `x-cable82-config: 1` header as config saves.
 
@@ -237,6 +242,7 @@ WantedBy=multi-user.target
 Replace `pi` (both places) with your own username if it differs: `whoami` tells you, and newer Raspberry Pi OS images let you pick any name at setup.
 `which node` confirms the path on the `ExecStart` line.
 Then `sudo systemctl enable --now cable82`, and `systemctl status cable82` should say `active (running)` with the broadcasting lines in its log.
+When a new release comes out, see [Updating](#updating): one line, and the TV takes care of itself.
 
 ### 3. Chromium in kiosk mode
 
@@ -351,6 +357,30 @@ Open the **CRT** panel in the control room:
 Pages fit themselves to whatever is left: a long fact or the weather card shrinks just enough, and the weather card gives up its sunrise line first.
 There are no fake scanline filters in CABLE 82: the CRT is the filter.
 
+## Updating
+
+An update is a `git pull` and a restart.
+Your settings, schedules, videos, and music are yours and stay put.
+
+```
+cd cable-82
+git pull
+node server.js
+```
+
+On a Pi running the service, restart the service instead of starting the server by hand:
+
+```
+cd ~/cable-82 && git pull && sudo systemctl restart cable82
+```
+
+The display updates itself.
+When the server comes back, the set reconnects to the tuner bus, sees a new build, and reloads onto the new files within a few seconds; the broadcast clock puts the program back where it belongs, on the same channel, at the same volume.
+Nobody touches the TV or the kiosk.
+
+`config.json`, your folders under `channels/`, and your own tracks in `music/` are not tracked by git, so an update never changes a setting, a schedule, a video, or a song.
+Releases and what changed in each are at [github.com/nothans/cable-82/releases](https://github.com/nothans/cable-82/releases); `git describe --tags` names the one you are on.
+
 ## Troubleshooting
 
 **"localhost refused to connect"** means nothing is listening on that port, so the server is not running.
@@ -395,8 +425,8 @@ The usual suspects are `User=` naming an account that does not exist, `ExecStart
 
 ## Testing
 
-- Server: `node --test test/server.test.mjs` - config validation, feeds, the channels API, the tuner bus, and Range serving.
-- Client pure functions: start the server and open `http://localhost:1982/test/harness.html` - the broadcast clock, schedules (overnight windows included), playlist order, and the dial.
+- Server: `node --test test/server.test.mjs` - config validation, feeds, the channels API, the tuner bus (the remote's keys included), and Range serving.
+- Client pure functions: start the server and open `http://localhost:1982/test/harness.html` - the broadcast clock, schedules (overnight windows included), playlist order, the dial, and the volume cycle.
 - Tuner drill: with more than one channel on the dial, `curl -X POST http://localhost:1982/api/tune -H "content-type: application/json" -d "{\"cmd\":\"up\"}"` and watch the display change channels - the whole bus in one command.
 - Failure drill: `node server.js --chaos` serves mock feeds that randomly hang and fail, so you can watch channel 82 shrug it off.
 - Soak: open `http://localhost:1982/?soak=1` for accelerated channel-82 page flips and refreshes with stats logged to the console.

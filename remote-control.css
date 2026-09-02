@@ -1,0 +1,257 @@
+/* CABLE 82 remote control: a 1960s Zenith Space Command, drawn in CSS.
+   Identity: the object leads and the page recedes. A tinted charcoal ground,
+   a chrome slab, a near-black plate with pinstripe rules, ivory keys and one
+   orange one, a serif wordmark. Every dimension is in em off the remote's
+   own width, so the same drawing fits a phone held upright or a laptop. */
+
+@font-face {
+  font-family: "VGA";
+  src: url("fonts/webplus-ibm-vga-8x16.woff") format("woff");
+  font-display: swap;
+}
+
+:root {
+  --ground: #1b1c22;
+  --ink: #e7e9f0;
+  --ink-dim: #a9adb8;
+  --warn: #e0b04a;
+  --link: #8fa6ff;
+  --chrome-hi: #f1f1ef;
+  --chrome: #b9bcbd;
+  --chrome-lo: #6f7377;
+  --plate: #17171a;
+  --pinstripe: rgba(234, 230, 216, 0.82);
+  --ivory: #ddd7c5;
+  --ivory-lo: #a79f8a;
+  --orange: #e8891c;
+  --orange-lo: #a85d0e;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --serif: Georgia, "Times New Roman", Times, serif;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+#stage {
+  min-height: 100vh;
+  min-height: 100dvh;
+  box-sizing: border-box;
+  padding: 24px 16px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+
+/* ---------------------------------------------------------- the slab */
+
+#remote {
+  /* Sized to fit the viewport whole, status line and all: the slab is 1.8
+     times taller than it is wide, and the text under it needs ~150px. */
+  --w: min(92vw, calc((100vh - 150px) / 1.8), 400px);
+  --w: min(92vw, calc((100dvh - 150px) / 1.8), 400px);
+  width: var(--w);
+  font-size: calc(var(--w) / 100); /* 1em = 1% of the remote's width */
+  aspect-ratio: 1 / 1.8; /* a squat block that fills a palm, not a wand */
+  position: relative;
+  border-radius: 4.5em;
+  /* A chrome brow above the plate for the medallion, a shallower chin below. */
+  padding: 36em 7em 22em;
+  box-sizing: border-box;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 3px),
+    linear-gradient(165deg, var(--chrome-hi) 0%, #cfd1cf 16%, #9ea1a3 44%, var(--chrome) 60%, var(--chrome-lo) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+    0 22px 44px -14px rgba(8, 9, 16, 0.7);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#medallion {
+  position: absolute;
+  top: 9em;
+  left: 50%;
+  width: 10em;
+  height: 10em;
+  box-sizing: border-box;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  border: 0.7em solid #e6e6e3;
+  background: #2038c8;
+  color: #f0f0ec;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+#medallion span {
+  font-family: "VGA", monospace;
+  font-size: 5em;
+  line-height: 1;
+  padding-top: 0.1em; /* the bitmap face sits high in its box */
+}
+
+/* ---------------------------------------------------------- the plate */
+
+#plate {
+  height: 100%;
+  box-sizing: border-box;
+  border-radius: 2.4em;
+  background: var(--plate);
+  border: 1px solid var(--pinstripe);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+}
+
+#keys {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-bottom: 1px solid var(--pinstripe);
+}
+
+.key {
+  /* The whole column is the key: a thumb lands anywhere in it. */
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  padding: 9em 0 0;
+  gap: 8em;
+  border: 0;
+  border-right: 1px solid var(--pinstripe);
+  background: transparent;
+  color: var(--ivory);
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.key:last-child { border-right: 0; }
+.key:focus { outline: none; }
+.key:focus-visible .cap { outline: 2px solid var(--ivory); outline-offset: 3px; }
+
+.label {
+  font-family: var(--sans);
+  font-size: 2.5em;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--ivory);
+}
+.label small {
+  display: block;
+  font-size: 0.78em;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  opacity: 0.85;
+}
+
+/* The key sits in a dark well; the cap is a pillow of aged plastic. */
+.well {
+  display: block;
+  width: 14em;
+  height: 44em;
+  border-radius: 1.6em;
+  background: #0b0b0d;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.9), inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+  padding: 1em;
+  box-sizing: border-box;
+}
+.cap {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 1.2em;
+  background: linear-gradient(180deg, #ece7d8 0%, var(--ivory) 45%, var(--ivory-lo) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.25),
+    0 3px 0 rgba(0, 0, 0, 0.55);
+  transform: translateY(0);
+  transition: transform 120ms var(--ease), box-shadow 120ms var(--ease), filter 120ms var(--ease);
+}
+.key-power .cap {
+  background: linear-gradient(180deg, #f5a648 0%, var(--orange) 45%, var(--orange-lo) 100%);
+}
+.key.down .cap,
+.key:active .cap {
+  transform: translateY(3px);
+  filter: brightness(0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+    0 0 0 rgba(0, 0, 0, 0.55);
+}
+.key[disabled] { cursor: default; }
+.key[disabled] .cap { filter: saturate(0.4) brightness(0.7); }
+
+/* ---------------------------------------------------------- the wordmark */
+
+#brand {
+  flex: 0 0 auto;
+  padding: 7em 0 7em;
+  text-align: center;
+  color: var(--ivory);
+}
+#wordmark {
+  font-family: var(--serif);
+  font-size: 9.5em;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+#subline {
+  margin-top: 1.2em;
+  font-family: var(--sans);
+  font-size: 3em;
+  line-height: 1.2;
+  font-weight: 500;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  opacity: 0.92;
+}
+
+/* ---------------------------------------------------------- around it */
+
+#status {
+  margin: 0;
+  min-height: 1.5em;
+  max-width: 34ch;
+  text-align: center;
+  color: var(--ink-dim);
+}
+#status.warn { color: var(--warn); }
+
+#foot {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-dim);
+}
+#foot a {
+  color: var(--link);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(143, 166, 255, 0.4);
+}
+#foot a:hover, #foot a:focus-visible { border-bottom-color: var(--link); outline: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cap { transition: none; }
+}

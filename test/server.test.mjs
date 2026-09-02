@@ -9,7 +9,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
-const { createApp, listenUrls } = require("../server.js");
+const { createApp, listenUrls, displayBuild } = require("../server.js");
 
 // ---------- upstream mock (the "internet") ----------
 
@@ -133,6 +133,15 @@ test("serves index.html at /", async () => {
   assert.equal(r.status, 200);
   assert.match(r.headers.get("content-type"), /text\/html/);
   assert.match(await r.text(), /CABLE 82/);
+});
+
+test("serves the remote at /remote-control", async () => {
+  const r = await fetch(base + "/remote-control");
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get("content-type"), /text\/html/);
+  const html = await r.text();
+  assert.match(html, /Remote Control/);
+  for (const cmd of ["down", "volume", "power", "up"]) assert.match(html, new RegExp('data-cmd="' + cmd + '"'));
 });
 
 test("serves css with the right mime type", async () => {
@@ -525,12 +534,49 @@ test("POST /api/tune broadcasts an event with a rising sequence to SSE listeners
   assert.equal(tunes.length, 2);
   assert.equal(tunes[0].data.cmd, "up");
   assert.deepEqual(tunes[1].data, { seq: t2.seq, cmd: "set", channel: 90 });
-  assert.ok(events.some((e) => e.event === "hello"));
+  const hello = events.find((e) => e.event === "hello");
+  assert.ok(hello, "the stream opens with a hello");
+  // The display's build token: 12 hex characters, stable for one server
+  // process, so a reconnect after a restart can tell a stale page to reload.
+  assert.match(hello.data.build, /^[0-9a-f]{12}$/);
+  assert.equal(hello.data.build, displayBuild());
+});
+
+test("the remote's volume and power keys ride the same bus", async () => {
+  const events = [];
+  const req = await new Promise((resolve, reject) => {
+    const q = http.get(base + "/api/events", (res) => {
+      let buf = "";
+      res.on("data", (c) => {
+        buf += c;
+        let idx;
+        while ((idx = buf.indexOf("\n\n")) >= 0) {
+          const chunk = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          const ev = /event: (\S+)/.exec(chunk);
+          const data = /data: (.*)/.exec(chunk);
+          if (ev && data) events.push({ event: ev[1], data: JSON.parse(data[1]) });
+        }
+      });
+      resolve(q);
+    });
+    q.on("error", reject);
+  });
+  await new Promise((r) => setTimeout(r, 100));
+  const v = await (await fetch(base + "/api/tune", { method: "POST", body: JSON.stringify({ cmd: "volume" }) })).json();
+  const p = await (await fetch(base + "/api/tune", { method: "POST", body: JSON.stringify({ cmd: "power" }) })).json();
+  assert.equal(v.ok, true);
+  assert.equal(p.listeners, 1); // the remote reads this to say "one set is listening"
+  await new Promise((r) => setTimeout(r, 150));
+  req.destroy();
+  const tunes = events.filter((e) => e.event === "tune").map((e) => e.data);
+  assert.deepEqual(tunes, [{ seq: v.seq, cmd: "volume" }, { seq: p.seq, cmd: "power" }]);
 });
 
 test("POST /api/tune validates commands", async () => {
   const bad = await fetch(base + "/api/tune", { method: "POST", body: JSON.stringify({ cmd: "explode" }) });
   assert.equal(bad.status, 400);
+  assert.match(await bad.text(), /up, down, set, volume, OR power/);
   const noChannel = await fetch(base + "/api/tune", { method: "POST", body: JSON.stringify({ cmd: "set" }) });
   assert.equal(noChannel.status, 400);
 });

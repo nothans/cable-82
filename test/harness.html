@@ -329,6 +329,23 @@
     eq(C.nextChannelIndex([{ number: 82 }], 0, +1, true), 0);
   });
 
+  t("the volume key steps loud, off, soft, medium, loud (the Zenith order)", () => {
+    eq(C.VOLUME_STEPS.map((v) => v.name).join(","), "LOUD,SOUND OFF,SOFT,MEDIUM");
+    eq(C.VOLUME_STEPS.map((v) => v.level).join(","), "1,0,0.35,0.7");
+    let i = 0;
+    const seen = [];
+    for (let n = 0; n < 5; n++) { i = C.nextVolumeStep(i); seen.push(i); }
+    eq(seen.join(","), "1,2,3,0,1");
+  });
+
+  t("nextVolumeStep treats a bad step as loud and steps to off", () => {
+    eq(C.nextVolumeStep(-1), 1);
+    eq(C.nextVolumeStep(99), 1);
+    eq(C.nextVolumeStep(NaN), 1);
+    eq(C.nextVolumeStep(undefined), 1);
+    eq(C.nextVolumeStep(1.5), 1);
+  });
+
   t("validateConfig synthesizes the one-channel dial and the tuner", () => {
     const cfg = C.validateConfig({}).cfg;
     eq(cfg.channels.length, 1);

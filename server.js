@@ -34,10 +34,29 @@ const http = require("node:http");
 const os = require("node:os");
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const { pipeline } = require("node:stream");
 const SCHEMA = require("./config-schema.js");
 
 const ROOT = __dirname;
+
+// The display's build: a hash of the files the kiosk runs, taken once at
+// startup. After `git pull` and a service restart the display reconnects to
+// the bus, sees a different token in the hello, and reloads onto the new
+// files by itself. Nobody has to touch the TV.
+const DISPLAY_FILES = ["index.html", "app.js", "style.css", "config-schema.js"];
+function displayBuild() {
+  const h = crypto.createHash("sha1");
+  for (const f of DISPLAY_FILES) {
+    try {
+      h.update(fs.readFileSync(path.join(ROOT, f)));
+    } catch (e) {
+      h.update(f);
+    }
+  }
+  return h.digest("hex").slice(0, 12);
+}
+const DISPLAY_BUILD = displayBuild();
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -592,6 +611,11 @@ function createApp(opts = {}) {
   const sseClients = new Set();
   let tuneSeq = 0;
   let lastTune = null;
+  // The four keys of a 1960s remote plus a direct dial: up/down step the
+  // dial, set jumps to a number, volume steps the sound (loud, off, soft,
+  // medium, loud), power toggles the picture off and on. Each is an event
+  // the display interprets; the server never holds a channel or a level.
+  const TUNE_CMDS = ["up", "down", "set", "volume", "power"];
 
   function sseBroadcast(event, data) {
     const msg = "event: " + event + "\ndata: " + JSON.stringify(data) + "\n\n";
@@ -621,7 +645,7 @@ function createApp(opts = {}) {
           return send(res, 400, "INVALID JSON");
         }
         const cmd = raw && raw.cmd;
-        if (cmd !== "up" && cmd !== "down" && cmd !== "set") return send(res, 400, "CMD MUST BE up, down, OR set");
+        if (!TUNE_CMDS.includes(cmd)) return send(res, 400, "CMD MUST BE up, down, set, volume, OR power");
         const evt = { seq: ++tuneSeq, cmd };
         if (cmd === "set") {
           const n = Math.round(Number(raw.channel));
@@ -648,7 +672,7 @@ function createApp(opts = {}) {
     });
     res.on("error", () => { /* dead socket: the close handler cleans up */ });
     res.write(": cable-82 tuner bus\n\n");
-    res.write("event: hello\ndata: " + JSON.stringify({ seq: tuneSeq }) + "\n\n");
+    res.write("event: hello\ndata: " + JSON.stringify({ seq: tuneSeq, build: DISPLAY_BUILD }) + "\n\n");
     sseClients.add(res);
     const ping = setInterval(() => {
       try {
@@ -680,6 +704,7 @@ function createApp(opts = {}) {
   function serveStatic(pathname, res, rangeHeader) {
     let p = pathname === "/" ? "/index.html" : pathname;
     if (p === "/config") p = "/config.html"; // friendly control-room URL
+    if (p === "/remote-control") p = "/remote-control.html"; // the clicker
     const segments = p.split("/").filter(Boolean);
     // No parent traversal, no dotfiles (.git, .meta, .durations.json, ...).
     if (!segments.length || segments.some((s) => s === ".." || s.startsWith("."))) {
@@ -823,8 +848,9 @@ if (require.main === module) {
     ];
     for (const u of urls.slice(1)) lines.push("  " + u + "   (a browser on another device on your network)");
     lines.push("Control room: " + urls[0] + "/config");
+    lines.push("Remote control: " + (urls[1] || urls[0]) + "/remote-control   (open it on your phone)");
     console.log(lines.join("\n"));
   });
 }
 
-module.exports = { createApp, listenUrls, naturalCompare };
+module.exports = { createApp, listenUrls, naturalCompare, displayBuild };

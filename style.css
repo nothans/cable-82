@@ -319,6 +319,15 @@ html, body { height: 100%; background: var(--letterbox); }
 }
 #tuner-blank[hidden] { display: none; }
 
+/* Switched off from the remote: a dark tube over everything, bug included. */
+#power-off {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  background: var(--c-ink);
+}
+#power-off[hidden] { display: none; }
+
 /* The channel bug: shown on every tune, fades on its own. */
 #channel-bug {
   position: absolute;
