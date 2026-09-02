@@ -4,7 +4,7 @@
 
 It exists because cheap HDMI-to-RF modulators and HDMI-to-composite converters send no EDID at all.
 Without one the Pi guesses a widescreen mode and refuses to send HDMI audio.
-Hand it to the kernel and both problems go away (see "Running it on a real CRT" in the main README):
+Hand it to the kernel and both problems go away (the full recipe is step 4 of [Running it on a real CRT](../README.md#running-it-on-a-real-crt-raspberry-pi) in the main README):
 
 ```
 sudo mkdir -p /lib/firmware/edid
