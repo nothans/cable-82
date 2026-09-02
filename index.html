@@ -63,12 +63,15 @@
     <div id="external-layer" hidden></div>
     <canvas id="tuner-snow" width="160" height="120" hidden></canvas>
     <div id="tuner-blank" hidden></div>
-    <!-- The power key's dark screen: the set is off, the clock runs on. -->
-    <div id="power-off" hidden></div>
     <div id="channel-bug" hidden>
       <div id="bug-number"></div>
       <div id="bug-name"></div>
     </div>
+  </div>
+  <!-- Switched off: the dark screen the set collapses into. It sits outside
+       the stage so the stage itself can fold up behind it. -->
+  <div id="power-off" hidden>
+    <div id="crt-line"></div>
   </div>
 </div>
 <script src="config-schema.js"></script>

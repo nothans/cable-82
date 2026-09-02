@@ -103,15 +103,24 @@ Tuning:
 
 - **Keyboard** - arrows or PageUp/PageDown to change channel, digits plus Enter to jump straight to a number.
 - **Gamepad** - a USB NES-style controller: up/down on the pad changes channel, Select jumps home to the board.
-- **Remote control** - open `/remote-control` on a phone: four keys styled after the 1960s Zenith Space Command, channel lower, volume, off-on, channel higher. The volume key steps loud, sound off, soft, medium, back to loud, like the motorized original. Off-on darkens the set; the broadcast clock keeps running, so on comes back to the program already in progress. The set remembers its volume and power state across a reload.
+- **Remote control** - open `/remote-control` on a phone: four keys styled after the 1960s Zenith Space Command, channel lower, volume, off-on, channel higher. The volume key steps loud, sound off, soft, medium, back to loud, like the motorized original. Off-on darkens the set the way a tube goes dark, and the broadcast clock keeps running, so on comes back to the program already in progress. The set remembers its volume and power state across a reload.
 - **HTTP** - `POST /api/tune` with `{"cmd":"up"}`, `{"cmd":"down"}`, `{"cmd":"set","channel":2}`, `{"cmd":"volume"}`, or `{"cmd":"power"}`. GPIO buttons, a Stream Deck, or anything that can make a request becomes a remote control.
 
 ![The remote control at /remote-control on a phone: a chrome Zenith Space Command with four keys](images/remote-control.png)
 
 Channel changes cover the cut with a beat of tuner static, then show a channel banner, exactly like a rented cable box.
 If the box you grew up with went black between channels instead, set `tuner.cut` to `black` in the control room (`none` is a hard cut).
+
 The tune API is meant for your LAN and is deliberately unauthenticated - anyone on your network can change the channel, which is also how a living room works.
 Don't expose it to the internet.
+
+### Switching off
+
+Press off and the picture does what a tube does when it loses power.
+The vertical deflection dies first, so the whole picture folds into one bright line across the middle while the beam is still sweeping side to side.
+Then the high voltage drops, the line pulls in to a dot, and the phosphor keeps glowing for a moment after the beam has gone.
+On is the same in reverse and quicker: a dot, a line, and the picture blooms open.
+Set `tuner.power` to `black` in the control room if you want a flat panel instead, gone the moment you press it.
 
 ### Tuner API
 
@@ -175,7 +184,7 @@ Everything the control room edits lives in `config.json`, and you can hand-edit 
 | `timeFormat` | `"12h"` or `"24h"` | `12h` |
 | `port` | Server port | `1982` |
 | `channels` | The dial: `{ number, name, type, enabled }` plus per-type fields - video channels add `folder`, `order` (`sequence`/`shuffle-daily`), `mode` (`continuous`/`schedule`), `schedule` windows (`{ days, start, end }`), `offAir` (`testcard`/`bars`/`snow`/`bulletin`), and optionally `breaks` (`{ folder, everyMinutes, spots }`: a second folder of spots cut in every `everyMinutes` minutes of program (0 to 240; 0 means only between programs), `spots` spots per break (1 to 20)); external channels add `url`. Empty means the board alone as channel 82 | the board on 82 |
-| `tuner` | Which tuning inputs are live (`sources.keyboard`, `sources.gamepad`, `sources.http`), whether the dial wraps at the ends (`wrap`), and what covers a channel change (`cut`: `static`/`black`/`none`) | all on, wraps, static |
+| `tuner` | Which tuning inputs are live (`sources.keyboard`, `sources.gamepad`, `sources.http`), whether the dial wraps at the ends (`wrap`), what covers a channel change (`cut`: `static`/`black`/`none`), and how the picture goes out (`power`: `crt`/`black`) | all on, wraps, static, crt |
 | `rotation` | Channel 82's page lineup, in order (`clock`, `messages`, `facts`, `dadjokes`, `weather`, `headlines`) | see file |
 | `pageSeconds` | Seconds per page | `12` |
 | `feeds` | RSS/Atom feeds: `{ id, label, url }`. The server only ever fetches these URLs | WBUR, Hacker News, nothans.com |

@@ -933,6 +933,7 @@
         bug: document.getElementById("channel-bug"),
         blank: document.getElementById("tuner-blank"),
         power: document.getElementById("power-off"),
+        crtLine: document.getElementById("crt-line"),
         bugNumber: document.getElementById("bug-number"),
         bugName: document.getElementById("bug-name"),
       };
@@ -1516,21 +1517,86 @@
       // on resumes the channel wherever it is now, the way a TV comes back
       // to a program already in progress. The dial is not touched; the set
       // remembers its channel. Every other key is dead while it is off.
+      //
+      // With tuner.power on "crt" the picture does not just vanish, it dies
+      // the way a tube dies. Losing power, a CRT loses vertical deflection
+      // first: the raster folds into a single bright line across the middle
+      // while the beam still sweeps side to side. Then the high voltage
+      // drops, that line pulls in to a dot, and the phosphor glows on for a
+      // moment after the beam has gone. Coming back is the same in reverse
+      // and quicker, because a picture that blooms open reads as a set warming
+      // up. The timings are here, the steps are classes in style.css.
+      // snap is a touch longer than its transition so the line has finished
+      // pulling in before the phosphor starts to fade.
+      const POWER_FX = { collapse: 170, snap: 175, fade: 380, dot: 40, open: 90, bloom: 190 };
+      let powerBusy = false; // a tube mid-collapse takes no orders
+
+      function stopChannel() {
+        for (const s of activeStops.splice(0)) {
+          try { s(); } catch (e) { /* keep stopping */ }
+        }
+        bulletin.suspend(); // the board has no stop of its own: it is the floor
+        clearTimeout(notice._t);
+        L.bug.hidden = true;
+      }
+
+      function setLine(cls) {
+        if (L.crtLine) L.crtLine.className = cls;
+      }
+
       function powerKey() {
+        if (powerBusy) return;
+        const crt = (cfg.tuner.power || "crt") === "crt" && !!L.crtLine;
         if (powered) {
           powered = false;
-          for (const s of activeStops.splice(0)) {
-            try { s(); } catch (e) { /* keep stopping */ }
+          if (!crt) {
+            stopChannel();
+            L.power.hidden = false;
+          } else {
+            powerBusy = true;
+            stage.classList.add("tube-off");
+            setTimeout(() => {
+              // The stage is a sliver by now; the dark screen takes over and
+              // carries the line, so the stage can snap back unseen behind it.
+              setLine("line");
+              L.power.hidden = false;
+              stage.classList.remove("tube-off");
+              stopChannel();
+              // The line was display:none a moment ago. Read its layout once so
+              // the browser has a style to transition *from*, or the snap lands
+              // in a single frame with nothing to see.
+              void L.crtLine.offsetWidth;
+              setLine("line snap");
+              setTimeout(() => {
+                setLine("line snap fade");
+                setTimeout(() => { setLine(""); powerBusy = false; }, POWER_FX.fade);
+              }, POWER_FX.snap);
+            }, POWER_FX.collapse);
           }
-          bulletin.suspend(); // the board has no stop of its own: it is the floor
-          clearTimeout(notice._t);
-          L.bug.hidden = true;
-          L.power.hidden = false;
         } else {
           powered = true;
-          L.power.hidden = true;
-          applyChannel(dialIndex);
-          banner(dial[dialIndex].number, dial[dialIndex].name);
+          if (!crt) {
+            L.power.hidden = true;
+            applyChannel(dialIndex);
+            banner(dial[dialIndex].number, dial[dialIndex].name);
+          } else {
+            powerBusy = true;
+            setLine("dot");
+            applyChannel(dialIndex); // loads behind the dark screen
+            setTimeout(() => {
+              setLine("dot open");
+              setTimeout(() => {
+                setLine("");
+                L.power.hidden = true;
+                stage.classList.add("tube-on");
+                setTimeout(() => {
+                  stage.classList.remove("tube-on");
+                  powerBusy = false;
+                  banner(dial[dialIndex].number, dial[dialIndex].name);
+                }, POWER_FX.bloom);
+              }, POWER_FX.open);
+            }, POWER_FX.dot);
+          }
         }
         try { sessionStorage.setItem("cable82.tuner.power", powered ? "on" : "off"); } catch (e) { /* fine */ }
       }

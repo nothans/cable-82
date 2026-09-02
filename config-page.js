@@ -542,6 +542,7 @@
     $("f-tunerHttp").checked = src.http !== false;
     $("f-tunerWrap").checked = tuner.wrap !== false;
     $("f-tunerCut").value = tuner.cut || "static";
+    $("f-tunerPower").value = tuner.power || "crt";
 
     renderFeeds();
     renderRotation();
@@ -759,6 +760,7 @@
         },
         wrap: $("f-tunerWrap").checked,
         cut: $("f-tunerCut").value,
+        power: $("f-tunerPower").value,
       },
       feeds: feeds.map((f) => ({ id: f.id, label: f.label, url: f.url })),
       rotation: rotation.map((s) => (s.type === "headlines" ? { type: "headlines", feed: s.feed } : { type: s.type })),

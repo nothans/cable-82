@@ -356,12 +356,19 @@
     eq(cfg.tuner.sources.keyboard, true);
     eq(cfg.tuner.wrap, true);
     eq(cfg.tuner.cut, "static");
+    eq(cfg.tuner.power, "crt");
   });
 
   t("validateConfig keeps a known tuner cut and falls back on an unknown one", () => {
     eq(C.validateConfig({ tuner: { cut: "black" } }).cfg.tuner.cut, "black");
     eq(C.validateConfig({ tuner: { cut: "none" } }).cfg.tuner.cut, "none");
     eq(C.validateConfig({ tuner: { cut: "fade" } }).cfg.tuner.cut, "static");
+  });
+
+  t("validateConfig keeps a known power-off style and falls back on an unknown one", () => {
+    eq(C.validateConfig({ tuner: { power: "black" } }).cfg.tuner.power, "black");
+    eq(C.validateConfig({ tuner: { power: "crt" } }).cfg.tuner.power, "crt");
+    eq(C.validateConfig({ tuner: { power: "melt" } }).cfg.tuner.power, "crt");
   });
 
   t("validateConfig keeps a valid video channel and its schedule", () => {

@@ -450,6 +450,12 @@
   // carriers; "black" is the blanked raster of a later cable box; "none" is
   // a hard cut.
   const CUT_STYLES = ["static", "black", "none"];
+  // And what switching off looks like. "crt" collapses the picture the way a
+  // tube does when it loses power: the vertical deflection dies first, so the
+  // raster folds into one bright line while the beam still sweeps, then the
+  // high voltage drops, the line pulls in to a dot, and the phosphor fades.
+  // "black" is a flat panel: gone the moment you press it.
+  const POWER_STYLES = ["crt", "black"];
   function validateTuner(raw) {
     const t = raw && typeof raw === "object" ? raw : {};
     const src = t.sources && typeof t.sources === "object" ? t.sources : {};
@@ -462,6 +468,7 @@
       },
       wrap: on(t.wrap, true),
       cut: CUT_STYLES.includes(t.cut) ? t.cut : "static",
+      power: POWER_STYLES.includes(t.power) ? t.power : "crt",
     };
   }
 

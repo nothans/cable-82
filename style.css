@@ -319,14 +319,68 @@ html, body { height: 100%; background: var(--letterbox); }
 }
 #tuner-blank[hidden] { display: none; }
 
-/* Switched off from the remote: a dark tube over everything, bug included. */
+/* Switched off from the remote: a dark tube over everything, bug included.
+   It covers the whole window, not just the stage, because the stage folds up
+   underneath it on the way out. */
 #power-off {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 70;
-  background: var(--c-ink);
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 #power-off[hidden] { display: none; }
+
+/* The dying raster. A CRT losing power loses vertical deflection first, so
+   the picture folds into one bright line while the beam still sweeps side to
+   side; then the high voltage drops, the line pulls in to a dot, and the
+   phosphor keeps glowing for a moment after the beam is gone. Each class is
+   one step of that, driven from app.js so the timings stay in one table. */
+#crt-line {
+  width: min(100vw, calc(100vh * 4 / 3));
+  height: max(2px, 0.45vh);
+  background: #fff;
+  box-shadow: 0 0 max(6px, 1vh) rgba(255, 255, 255, 0.45);
+  opacity: 0;
+  transform: scaleX(1);
+}
+#crt-line.line { opacity: 1; }
+/* The beam pulls in to a point. The glow is a box-shadow and transforms
+   scale it away to nothing, so the point stands on its own: small, hard, and
+   a little taller than the line it came from, the way the last of the beam
+   piles up in one spot. */
+#crt-line.snap {
+  transition: transform 130ms cubic-bezier(0.5, 0, 0.9, 0.4);
+  transform: scaleX(0.014) scaleY(1.6);
+}
+/* By now the line has already pulled in to a dot, so only the glow changes:
+   the phosphor decays where the beam left it. */
+#crt-line.fade {
+  transition: opacity 380ms ease-out, transform 380ms ease-in;
+  opacity: 0;
+  transform: scaleX(0.014) scaleY(0.9);
+}
+#crt-line.dot { opacity: 1; transform: scaleX(0.014) scaleY(1.6); }
+#crt-line.dot.open {
+  transition: transform 90ms ease-out;
+  transform: scaleX(1) scaleY(1);
+}
+
+/* The picture folding away, and blooming back. The stage carries these; the
+   4:3 box is what collapses, so the fold reads as the tube, not the page. */
+#stage.tube-off {
+  transition: transform 170ms cubic-bezier(0.25, 0.6, 0.35, 1), filter 170ms ease-out;
+  transform: scaleY(0.008) scaleX(1.03);
+  filter: brightness(2.6) contrast(1.15);
+}
+#stage.tube-on { animation: tube-on 190ms ease-out; }
+@keyframes tube-on {
+  0% { transform: scaleY(0.01); filter: brightness(2.2); }
+  60% { transform: scaleY(1.04); filter: brightness(1.25); }
+  100% { transform: scaleY(1); filter: brightness(1); }
+}
 
 /* The channel bug: shown on every tune, fades on its own. */
 #channel-bug {
