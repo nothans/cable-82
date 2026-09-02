@@ -34,6 +34,7 @@ const http = require("node:http");
 const os = require("node:os");
 const fs = require("node:fs");
 const path = require("node:path");
+const { pipeline } = require("node:stream");
 const SCHEMA = require("./config-schema.js");
 
 const ROOT = __dirname;
@@ -704,15 +705,19 @@ function createApp(opts = {}) {
           "content-range": "bytes " + start + "-" + end + "/" + st.size,
           "content-length": end - start + 1,
         }));
-        const stream = fs.createReadStream(fp, { start, end });
-        stream.on("error", () => res.destroy());
-        return stream.pipe(res);
+        return sendFile(fp, { start, end }, res);
       }
       res.writeHead(200, Object.assign(base, { "content-length": st.size }));
-      const stream = fs.createReadStream(fp);
-      stream.on("error", () => res.destroy());
-      stream.pipe(res);
+      sendFile(fp, {}, res);
     });
+  }
+
+  // <video> opens a file, reads a little, and drops the connection dozens of
+  // times per program. A plain pipe() leaves each dropped read stream (and
+  // its file descriptor) open for good; pipeline() tears it down with the
+  // response, so a day on the air does not leak hundreds of open files.
+  function sendFile(fp, range, res) {
+    pipeline(fs.createReadStream(fp, range), res, () => { /* closed or errored: both ends are down */ });
   }
 
   const server = http.createServer((req, res) => {

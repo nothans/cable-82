@@ -1190,22 +1190,49 @@
             b.addEventListener("ended", onEnded);
             b.addEventListener("error", onError);
           }
-          // The resync doubles as a stall watchdog: a "playing" video whose
-          // clock hasn't moved for a whole tick is wedged (IO stall, decoder
-          // hiccup) - drop the source so videoDrive reloads it at the clock.
-          let stallT = -1;
-          const resync = setInterval(() => {
-            if (!vid.hidden && !vid.paused && !vid.ended && vid.currentTime === stallT) {
-              currentUrl = "";
+          // The end of a program is not taken on trust. The Pi's kiosk
+          // Chromium holds the last frame of a commercial and never delivers
+          // `ended`, so nothing rolled until the next resync - a dead screen
+          // for up to 30 s, long enough to swallow a 15 s spot whole. This
+          // watch sees the end for itself: a buffer sitting in the ended
+          // state, or a clock stopped inside the last second of the file, is
+          // the ending; a clock stopped anywhere else (IO stall, decoder
+          // wedge) is a reason to drop the source and let videoDrive reload
+          // it at the broadcast clock.
+          let watchT = -1;
+          let watchSince = 0;
+          const endWatch = setInterval(() => {
+            if (vid.hidden || vid.error || !currentUrl) {
+              watchT = -1;
+              return;
             }
-            stallT = vid.currentTime;
-            videoDrive(channel, files);
-          }, 30000);
+            if (vid.ended) {
+              onEnded({ target: vid });
+              return;
+            }
+            const t = vid.currentTime;
+            const now = Date.now();
+            if (t !== watchT) {
+              watchT = t;
+              watchSince = now;
+              return;
+            }
+            const stalled = now - watchSince;
+            const d = vid.duration;
+            if (Number.isFinite(d) && d > 0 && t >= d - 1 && stalled >= 300) {
+              onEnded({ target: vid });
+            } else if (stalled >= 4000) {
+              currentUrl = "";
+              videoDrive(channel, files);
+            }
+          }, 250);
+          const resync = setInterval(() => videoDrive(channel, files), 30000);
           vidStops.push(() => {
             for (const b of vidBufs) {
               b.removeEventListener("ended", onEnded);
               b.removeEventListener("error", onError);
             }
+            clearInterval(endWatch);
             clearInterval(resync);
           });
           videoDrive(channel, files);

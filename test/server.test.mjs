@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const { createApp, listenUrls } = require("../server.js");
@@ -545,6 +546,40 @@ test("static serving honors Range requests (how video seeks)", async () => {
   assert.equal(await part.text(), text.slice(2, 6));
   const off = await fetch(base + "/README.md", { headers: { range: "bytes=999999999-" } });
   assert.equal(off.status, 416);
+});
+
+test("a dropped range request closes its file (no leaked descriptors)", async () => {
+  // <video> opens, reads a little, and drops the connection many times per
+  // program; after 12 hours on the air a Pi had 300 leaked open files.
+  // Static files come from the project root; channels/* is gitignored, so a
+  // throwaway file there is served and never committed.
+  const big = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "channels", "tmp-fd-leak.bin");
+  fs.writeFileSync(big, Buffer.alloc(8 * 1024 * 1024, 7));
+  const opened = [];
+  const real = fs.createReadStream;
+  fs.createReadStream = function (...args) {
+    const st = real.apply(this, args);
+    opened.push(st);
+    return st;
+  };
+  try {
+    await new Promise((resolve, reject) => {
+      const req = http.get(base + "/channels/tmp-fd-leak.bin", { headers: { range: "bytes=1000-" } }, (res) => {
+        assert.equal(res.statusCode, 206);
+        res.once("data", () => req.destroy()); // the client walks away mid-stream
+        res.on("close", resolve);
+        res.on("error", () => {}); // aborted by us
+      });
+      req.on("error", (e) => (e.code === "ECONNRESET" ? resolve() : reject(e)));
+    });
+  } finally {
+    fs.createReadStream = real;
+    fs.rmSync(big, { force: true });
+  }
+  assert.equal(opened.length, 1);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(opened[0].destroyed, true, "read stream torn down with the response");
+  assert.equal(opened[0].closed, true, "file descriptor released");
 });
 
 test("naturalCompare orders seasons and episodes like a human", () => {
