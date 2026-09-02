@@ -252,6 +252,13 @@ function createApp(opts = {}) {
       configPath: path.join(ROOT, "config.json"),
       musicDir: path.join(ROOT, "music"),
       channelsDir: path.join(ROOT, "channels"),
+      // Extra places to look for a channels folder, on top of the drives
+      // found by the scan below.
+      mediaDirs: [],
+      // Where drives turn up: Linux mounts them under /media or /mnt, macOS
+      // under /Volumes. Overridable so a test can point the scan at a
+      // fixture instead of the machine's real drives; empty means do not look.
+      mediaScanDirs: ["/media", "/mnt", "/Volumes"],
       upstreamTimeoutMs: 10000,
       maxFeedBytes: 1024 * 1024,
       maxConfigBytes: 512 * 1024,
@@ -517,9 +524,97 @@ function createApp(opts = {}) {
   // The server never probes media itself (dependency-free); the display
   // learns each file's duration once from the <video> metadata and posts it
   // back, so the cache fills itself on first play and then stays.
-  function readDurations(folder) {
+  // ---------------------------------------------------------- where channels live
+  //
+  // A channel is a folder of video. The bundled one is channels/ next to the
+  // server, but a 16 GB card fills up fast and a library does not have to live
+  // on it: plug in a drive, put a channels/ folder at the top of it, and its
+  // folders join the same pool under the same names. Removable media is
+  // scanned (Linux mounts them under /media or /mnt, macOS under /Volumes),
+  // and --media adds any other path, a NAS mount included.
+  let rootsCache = { at: 0, roots: [] };
+
+  function mediaCandidates() {
+    const out = [];
+    for (const base of o.mediaScanDirs) {
+      let entries = [];
+      try {
+        entries = fs.readdirSync(base);
+      } catch (e) {
+        continue; // that base does not exist on this machine
+      }
+      for (const name of entries) {
+        const dir = path.join(base, name);
+        out.push(dir);
+        // Linux desktops mount per user: /media/<user>/<label>.
+        try {
+          if (fs.statSync(dir).isDirectory()) {
+            for (const sub of fs.readdirSync(dir)) out.push(path.join(dir, sub));
+          }
+        } catch (e) {
+          /* unreadable mount point, skip it */
+        }
+      }
+    }
+    return out;
+  }
+
+  // Every root that actually holds a channels folder right now, the built-in
+  // one first so a local folder always wins a name it shares with a drive.
+  // Cached for a few seconds: a drive can come and go, but not that fast, and
+  // this runs on every listing.
+  function channelRoots() {
+    const now = Date.now();
+    if (now - rootsCache.at < 5000) return rootsCache.roots;
+    const roots = [{ dir: o.channelsDir, volume: "" }];
+    const seen = new Set([path.resolve(o.channelsDir)]);
+    const add = (dir, volume) => {
+      const abs = path.resolve(dir);
+      if (seen.has(abs)) return false;
+      try {
+        if (!fs.statSync(abs).isDirectory()) return false;
+      } catch (e) {
+        return false;
+      }
+      seen.add(abs);
+      roots.push({ dir: abs, volume });
+      return true;
+    };
+    // A drive earns a place by carrying a channels folder, and nothing else:
+    // every mount point is a directory, so without that rule a plugged-in
+    // drive would offer its whole contents as channels.
+    for (const mount of mediaCandidates()) add(path.join(mount, "channels"), path.basename(mount));
+    // A path named with --media is a deliberate choice, so it may be the
+    // channels folder itself.
+    for (const dir of o.mediaDirs || []) {
+      if (!add(path.join(dir, "channels"), path.basename(dir))) add(dir, path.basename(dir));
+    }
+    rootsCache = { at: now, roots };
+    return roots;
+  }
+
+  // The directory a folder name resolves to, and which volume it came from.
+  // Names stay single safe segments, so a config written before any of this
+  // means exactly what it always did.
+  function resolveFolder(name) {
+    if (!safeFolder(name)) return null;
+    for (const root of channelRoots()) {
+      const dir = path.join(root.dir, name);
+      if (!dir.startsWith(root.dir + path.sep)) continue; // belt and braces
+      try {
+        if (fs.statSync(dir).isDirectory()) return { dir, volume: root.volume };
+      } catch (e) {
+        /* not on this root */
+      }
+    }
+    return null;
+  }
+
+  function readDurations(folder, dir) {
+    const base = dir || (resolveFolder(folder) || {}).dir;
+    if (!base) return {};
     try {
-      const raw = JSON.parse(fs.readFileSync(path.join(o.channelsDir, folder, ".durations.json"), "utf8"));
+      const raw = JSON.parse(fs.readFileSync(path.join(base, ".durations.json"), "utf8"));
       return raw && typeof raw === "object" ? raw : {};
     } catch (e) {
       return {};
@@ -533,13 +628,15 @@ function createApp(opts = {}) {
   }
 
   function listChannelFiles(folder) {
-    const dir = path.join(o.channelsDir, folder);
-    const durations = readDurations(folder);
+    const found = resolveFolder(folder);
+    if (!found) return null; // folder missing on every root
+    const dir = found.dir;
+    const durations = readDurations(folder, dir);
     let names = [];
     try {
       names = fs.readdirSync(dir).filter((f) => VIDEO_RE.test(f)).sort(naturalCompare);
     } catch (e) {
-      return null; // folder missing
+      return null;
     }
     return names.map((f) => ({
       file: f,
@@ -553,28 +650,34 @@ function createApp(opts = {}) {
   // display). One endpoint, one scan, both consumers.
   function handleChannels(res) {
     const folders = [];
-    try {
-      for (const name of fs.readdirSync(o.channelsDir).sort(naturalCompare)) {
-        if (!safeFolder(name)) continue;
-        let st;
+    const listed = new Set();
+    for (const root of channelRoots()) {
+      let names = [];
+      try {
+        names = fs.readdirSync(root.dir).sort(naturalCompare);
+      } catch (e) {
+        continue; // no channels folder on this root: nothing to add
+      }
+      for (const name of names) {
+        if (!safeFolder(name) || listed.has(name)) continue;
         try {
-          st = fs.statSync(path.join(o.channelsDir, name));
+          if (!fs.statSync(path.join(root.dir, name)).isDirectory()) continue;
         } catch (e) {
           continue;
         }
-        if (!st.isDirectory()) continue;
+        listed.add(name);
         const files = listChannelFiles(name) || [];
         const known = files.filter((f) => f.duration != null);
         folders.push({
           folder: name,
+          volume: root.volume,
           files: files.length,
           seconds: Math.round(known.reduce((a, f) => a + f.duration, 0)),
           probed: known.length,
         });
       }
-    } catch (e) {
-      /* no channels folder yet: an empty dial is fine */
     }
+    folders.sort((a, b) => naturalCompare(a.folder, b.folder));
     const cfg = loadConfig();
     const channels = [];
     for (const ch of (cfg && cfg.channels) || []) {
@@ -605,14 +708,16 @@ function createApp(opts = {}) {
         }
         const folder = raw && raw.folder;
         if (!safeFolder(folder)) return send(res, 400, "BAD FOLDER");
-        const dir = path.join(o.channelsDir, folder);
+        const found = resolveFolder(folder);
+        if (!found) return send(res, 404, "UNKNOWN FOLDER");
+        const dir = found.dir;
         let names;
         try {
           names = new Set(fs.readdirSync(dir).filter((f) => VIDEO_RE.test(f)));
         } catch (e) {
           return send(res, 404, "UNKNOWN FOLDER");
         }
-        const cache = readDurations(folder);
+        const cache = readDurations(folder, dir);
         let wrote = 0;
         const entries = raw.durations && typeof raw.durations === "object" ? raw.durations : {};
         for (const [file, dur] of Object.entries(entries)) {
@@ -741,8 +846,18 @@ function createApp(opts = {}) {
     if (!segments.length || segments.some((s) => s === ".." || s.startsWith("."))) {
       return send(res, 403, "FORBIDDEN");
     }
-    const fp = path.normalize(path.join(ROOT, ...segments));
-    if (!fp.startsWith(ROOT + path.sep)) return send(res, 403, "FORBIDDEN");
+    let fp;
+    if (segments.length === 3 && segments[0] === "channels") {
+      // channels/<folder>/<file> resolves through the roots, so a program on
+      // a plugged-in drive streams exactly like one on the card.
+      const found = resolveFolder(segments[1]);
+      if (!found) return send(res, 404, "NOT FOUND");
+      fp = path.normalize(path.join(found.dir, segments[2]));
+      if (!fp.startsWith(found.dir + path.sep)) return send(res, 403, "FORBIDDEN");
+    } else {
+      fp = path.normalize(path.join(ROOT, ...segments));
+      if (!fp.startsWith(ROOT + path.sep)) return send(res, 403, "FORBIDDEN");
+    }
     fs.stat(fp, (err, st) => {
       if (err || !st.isFile()) return send(res, 404, "NOT FOUND");
       const type = MIME[path.extname(fp).toLowerCase()] || "application/octet-stream";
@@ -841,6 +956,7 @@ function parseArgs(argv) {
     if (argv[i] === "--mock") args.mock = true;
     else if (argv[i] === "--chaos") { args.chaos = true; args.mock = true; }
     else if (argv[i] === "--port") args.port = Number(argv[++i]) || null;
+    else if (argv[i] === "--media") (args.mediaDirs = args.mediaDirs || []).push(argv[++i]);
   }
   return args;
 }

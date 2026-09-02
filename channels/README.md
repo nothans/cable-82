@@ -28,6 +28,7 @@ Schedules, off-air cards, and the tuner are covered in the main README's [Channe
 ## How it works
 
 - **Folder = channel.** The dial lists these folders in a picker; you never type a path.
+- **Any drive will do.** This folder is the built-in one, not the only one. A `channels` folder at the top of a USB drive or a mounted share contributes its folders to the same picker, which is how a library bigger than the boot card gets on the air. Same names, same rules; the control room says which drive each one came from.
 - **Order.** Files sort naturally (digit runs compare as numbers, so `E2` comes before `E10`); name files in airing order, e.g. `S01.E01.mp4`. Or set the channel to *Shuffled daily*: a fresh order each day, seeded by the date, so it holds all day and reshuffles tomorrow.
 - **Broadcast, not playback.** The channel's position is computed from the wall clock, so tuning away and back lands you mid-program. Nothing ever "resumes where you left off" - that's a VCR, not a channel.
 - **Formats.** `.mp4`, `.m4v`, `.webm`, `.ogv`, `.mov`. On a Pi 3 B+, H.264 up to ~480p plays comfortably in software; test anything bigger.

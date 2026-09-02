@@ -11,6 +11,7 @@ Features:
 
 - **Community Bulletin Board** - bundled as channel 82: your RSS feeds, news, weather, and local events.
 - **Video channels** - place videos in a folder to define your own channel, like a Saturday-morning cartoon lineup or old 50s movies.
+- **Channels on any drive** - a 16 GB card fills up fast. Plug in a USB drive with a `channels` folder on it and its folders join the same list, streaming the same way.
 - **A guide channel** - CABLEVUE on channel 0 lists what is on every channel now and next, half hour by half hour, and crawls up the screen when the lineup is long. Add a channel and it is in the guide.
 - **Commercial breaks** - give a video channel a second folder of spots and it cuts them into the program: a few minutes of movie, three commercials, back to the movie where it left off.
 - **External channels** - point a channel at a website to create a channel out of anything.
@@ -102,6 +103,17 @@ A video channel can run around the clock or keep **scheduled hours** - dayparts 
 A window whose end time is at or before its start runs overnight into the next morning, so "Saturday 20:00 to 01:00" is one window, not two.
 Off the air it shows a test card with the resume time, color bars, or static - or falls back to the board.
 The control room draws the week as a grid so you can see the schedule at a glance.
+
+### Channels on another drive
+
+A library does not have to fit on the card the system boots from.
+Put a `channels` folder at the top of a USB drive, a spinning disk, or a mounted network share, drop your folders inside it, and they appear in the picker alongside the built-in ones.
+The drive is found wherever the machine mounts it (`/media`, `/mnt`, `/Volumes`), and `node server.js --media /path/to/library` names one that lives anywhere else.
+
+A drive only counts if it carries a `channels` folder, so plugging in a disk full of photos and tax returns does not offer them as channels.
+Folder names stay plain names, so a channel is written the same way wherever its files live, and if the same name exists in two places the built-in folder wins.
+The control room says which drive a folder came from, because the same name can mean a different library once the drive is unplugged.
+Pull the drive and its channels go off the air with a test card, the same as a folder you deleted; plug it back in and they return.
 
 A video channel can also take **commercial breaks**: pick a second folder for the spots, say how many minutes of program run between breaks, and how many spots fill each one.
 Each program is cut into even acts of about that length, a break follows every act, the last one included, so a break also separates each program from the next.

@@ -130,7 +130,10 @@
   function folderLabel(f) {
     const mins = Math.round(f.seconds / 60);
     const dur = f.probed < f.files ? f.files + " files" : f.files + " files, " + (mins >= 60 ? Math.floor(mins / 60) + "h " + (mins % 60) + "m" : mins + "m");
-    return f.folder + "  (" + dur + ")";
+    // A folder on a plugged-in drive says so: the same name can mean a
+    // different library once the drive is unplugged.
+    const where = f.volume ? ", on " + f.volume : "";
+    return f.folder + "  (" + dur + where + ")";
   }
 
   function renderChannels() {

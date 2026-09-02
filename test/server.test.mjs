@@ -110,10 +110,24 @@ before(async () => {
   fs.mkdirSync(path.join(channelsDir, "spots"));
   for (const f of ["ad-1.mp4", "ad-2.mp4"]) fs.writeFileSync(path.join(channelsDir, "spots", f), "x");
   fs.writeFileSync(path.join(channelsDir, "spots", ".durations.json"), JSON.stringify({ "ad-1.mp4": 30 }));
+  // A pretend drive: a channels folder somewhere else entirely, the way a USB
+  // stick or a NAS mount looks to the server. The scan stays off so the
+  // machine running the tests can never contribute a real one.
+  const usbDir = path.join(tmpDir, "usb");
+  fs.mkdirSync(path.join(usbDir, "channels", "Beavis and Butthead"), { recursive: true });
+  for (const f of ["BB01.mp4", "BB02.mp4"]) {
+    fs.writeFileSync(path.join(usbDir, "channels", "Beavis and Butthead", f), "usbvideo");
+  }
+  // Same name on both: the built-in folder must win.
+  fs.mkdirSync(path.join(usbDir, "channels", "cartoons"), { recursive: true });
+  fs.writeFileSync(path.join(usbDir, "channels", "cartoons", "IMPOSTOR.mp4"), "x");
+
   app = createApp({
     configPath,
     musicDir,
     channelsDir,
+    mediaDirs: [usbDir],
+    mediaScanDirs: [], // never the test machine's own drives
     upstreamTimeoutMs: 400,
     maxFeedBytes: 64 * 1024,
     weatherApiBase: `http://127.0.0.1:${upstreamPort}/wx`,
@@ -397,6 +411,94 @@ test("GET /api/music lists only audio files, sorted", async () => {
   const j = await r.json();
   assert.deepEqual(j.tracks.map((t) => t.file), ["a-track.mp3", "b-track.ogg", "c-track.wav"]);
   assert.ok(j.tracks[0].url.startsWith("music/"), "url points into the music folder");
+});
+
+test("a channels folder on another drive joins the same pool", async () => {
+  const j = await (await fetch(base + "/api/channels")).json();
+  const names = j.folders.map((f) => f.folder);
+  assert.ok(names.includes("Beavis and Butthead"), "the drive's folder is listed");
+  const bb = j.folders.find((f) => f.folder === "Beavis and Butthead");
+  assert.equal(bb.files, 2);
+  assert.equal(bb.volume, "usb", "and it says which volume it came from");
+  const local = j.folders.find((f) => f.folder === "cartoons");
+  assert.equal(local.volume, "", "a folder on the card has no volume label");
+  assert.deepEqual(names, [...names].sort((a, b) => a.localeCompare(b, "en")), "the pool is one sorted list");
+});
+
+test("a folder name that exists on both roots resolves to the built-in one", async () => {
+  const j = await (await fetch(base + "/api/channels")).json();
+  assert.equal(j.folders.filter((f) => f.folder === "cartoons").length, 1, "listed once, not twice");
+  const cartoons = j.folders.find((f) => f.folder === "cartoons");
+  assert.equal(cartoons.volume, "");
+  assert.equal(cartoons.files, 3, "the card's three files, not the drive's impostor");
+});
+
+test("video on another drive streams, ranges and all", async () => {
+  const url = base + "/channels/" + encodeURIComponent("Beavis and Butthead") + "/BB01.mp4";
+  const whole = await fetch(url);
+  assert.equal(whole.status, 200);
+  assert.equal(await whole.text(), "usbvideo");
+  const part = await fetch(url, { headers: { range: "bytes=0-2" } });
+  assert.equal(part.status, 206);
+  assert.equal(part.headers.get("content-range"), "bytes 0-2/8");
+  assert.equal(await part.text(), "usb");
+});
+
+test("a folder name cannot climb out of the drive it lives on", async () => {
+  for (const bad of ["..", "../usb", "/etc/passwd", ".hidden"]) {
+    const r = await fetch(base + "/api/channels/durations", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-cable82-config": "1" },
+      body: JSON.stringify({ folder: bad, durations: {} }),
+    });
+    assert.equal(r.status, 400, bad + " is refused");
+  }
+  // and a dotfile inside a real folder on the drive is not served
+  const dot = await fetch(base + "/channels/" + encodeURIComponent("Beavis and Butthead") + "/.durations.json");
+  assert.equal(dot.status, 403);
+});
+
+test("durations posted for a drive's folder are cached on that drive", async () => {
+  const r = await fetch(base + "/api/channels/durations", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-cable82-config": "1" },
+    body: JSON.stringify({ folder: "Beavis and Butthead", durations: { "BB01.mp4": 1412.5 } }),
+  });
+  assert.equal(r.status, 200);
+  const j = await (await fetch(base + "/api/channels")).json();
+  const bb = j.folders.find((f) => f.folder === "Beavis and Butthead");
+  assert.equal(bb.probed, 1);
+  assert.equal(bb.seconds, 1413, "and it counts toward that folder's running time");
+});
+
+test("a plugged-in drive is only listed when it carries a channels folder", async () => {
+  // Every mount point is a directory, so the rule has to be the channels
+  // folder itself: otherwise plugging in a drive would offer Taxes and
+  // Photos 2019 as channels.
+  const mediaRoot = path.join(tmpDir, "media");
+  const bare = path.join(mediaRoot, "HOLIDAY SNAPS");
+  fs.mkdirSync(path.join(bare, "Photos 2019"), { recursive: true });
+  fs.mkdirSync(path.join(bare, "Taxes"), { recursive: true });
+  const stocked = path.join(mediaRoot, "USB DISK");
+  fs.mkdirSync(path.join(stocked, "channels", "Beavis and Butthead"), { recursive: true });
+  fs.writeFileSync(path.join(stocked, "channels", "Beavis and Butthead", "BB01.mp4"), "x");
+
+  const app2 = createApp({
+    configPath,
+    channelsDir: path.join(tmpDir, "channels"),
+    mediaScanDirs: [mediaRoot],
+  });
+  await new Promise((r) => app2.listen(0, "127.0.0.1", r));
+  const base2 = "http://127.0.0.1:" + app2.address().port;
+  try {
+    const names = (await (await fetch(base2 + "/api/channels")).json()).folders.map((f) => f.folder);
+    assert.ok(names.includes("Beavis and Butthead"), "the drive that carries channels is in");
+    assert.ok(!names.includes("Photos 2019"), "the drive that does not is left alone");
+    assert.ok(!names.includes("Taxes"));
+    assert.ok(!names.includes("HOLIDAY SNAPS"), "and the mount point is not itself a channel");
+  } finally {
+    app2.close();
+  }
 });
 
 test("GET /api/version reports the release, the build, and the repo", async () => {
