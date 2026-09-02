@@ -501,6 +501,70 @@ test("a plugged-in drive is only listed when it carries a channels folder", asyn
   }
 });
 
+test("GET /api/system says what the machine is and whether it can be powered", async () => {
+  const j = await (await fetch(base + "/api/system")).json();
+  assert.equal(typeof j.pi, "boolean");
+  assert.equal(typeof j.power, "boolean");
+  assert.ok(j.model === null || typeof j.model === "string");
+  // The test app has no power runner, and the machine running the tests is
+  // not a Pi, so the control room would not offer the buttons.
+  assert.equal(j.power, false);
+});
+
+test("POST /api/system refuses without the header, on a bad command, and on a machine that cannot", async () => {
+  const noHeader = await fetch(base + "/api/system", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ cmd: "restart" }),
+  });
+  assert.equal(noHeader.status, 403, "a cross-site page cannot reach it");
+
+  const badCmd = await fetch(base + "/api/system", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-cable82-config": "1" },
+    body: JSON.stringify({ cmd: "explode" }),
+  });
+  assert.equal(badCmd.status, 400);
+
+  const notAllowed = await fetch(base + "/api/system", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-cable82-config": "1" },
+    body: JSON.stringify({ cmd: "shutdown" }),
+  });
+  assert.equal(notAllowed.status, 403, "no passwordless sudo, no power");
+});
+
+test("a restart stops the station and flushes the disks before handing over", async () => {
+  // The runner stands in for sudo so the test can watch the sequence without
+  // rebooting the machine running it.
+  const ran = [];
+  const app2 = createApp({
+    configPath,
+    channelsDir: path.join(tmpDir, "channels"),
+    mediaScanDirs: [],
+    powerRun: (args) => ran.push(args.join(" ")),
+  });
+  await new Promise((r) => app2.listen(0, "127.0.0.1", r));
+  const base2 = "http://127.0.0.1:" + app2.address().port;
+  try {
+    assert.equal((await (await fetch(base2 + "/api/system")).json()).power, true);
+    for (const [cmd, last] of [["restart", "systemctl reboot"], ["shutdown", "systemctl poweroff"]]) {
+      ran.length = 0;
+      const r = await fetch(base2 + "/api/system", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-cable82-config": "1" },
+        body: JSON.stringify({ cmd }),
+      });
+      assert.equal(r.status, 200);
+      assert.deepEqual(await r.json(), { ok: true, cmd }, "it answers before it acts");
+      await new Promise((r2) => setTimeout(r2, 700));
+      assert.deepEqual(ran, ["systemctl stop cable82", "sync", last], cmd + " follows the safe order");
+    }
+  } finally {
+    app2.close();
+  }
+});
+
 test("GET /api/version reports the release, the build, and the repo", async () => {
   const r = await fetch(base + "/api/version");
   assert.equal(r.status, 200);

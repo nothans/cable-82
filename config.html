@@ -163,6 +163,8 @@
   }
 
   .release-line { padding: 6px 0; }
+  .power-row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; padding: 4px 0; }
+  .power-row button.armed { border-color: var(--danger); color: var(--danger); }
 
 
   /* ---- panels ---- */
@@ -447,6 +449,26 @@
             <label for="f-port">Server port</label>
             <input type="number" id="f-port" min="1" max="65535" step="1">
             <span class="note">Takes effect the next time the server restarts.</span>
+          </div>
+        </div>
+      </section>
+      <section class="panel" id="p-power" hidden>
+        <h3>Power</h3>
+        <p class="hint">Restart or switch off the machine the station runs on. Both stop the station and flush the disks first, which is what keeps a memory card from being corrupted.</p>
+        <div class="grid">
+          <div class="field">
+            <label>Restart</label>
+            <div class="power-row">
+              <button type="button" id="restartHost" class="ghost small">Restart&#8230;</button>
+              <span class="note" id="restartNote">Back on the air in about a minute.</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>Shut down</label>
+            <div class="power-row">
+              <button type="button" id="shutdownHost" class="ghost small">Shut down&#8230;</button>
+              <span class="note" id="shutdownNote">Wait for the green light to stop blinking, then pull the power.</span>
+            </div>
           </div>
         </div>
       </section>

@@ -51,8 +51,11 @@
     <div id="video-layer" hidden>
       <!-- Two buffers: one on the air, one cueing the next program, so a
            file boundary is a cut instead of a load. -->
-      <video playsinline></video>
-      <video playsinline hidden></video>
+      <!-- disableRemotePlayback keeps Chromium from floating a Cast button over
+           the picture when it spots a cast device on the network; a TV channel
+           has no business offering to be sent to another TV. -->
+      <video playsinline disableRemotePlayback disablePictureInPicture x-webkit-airplay="deny"></video>
+      <video playsinline disableRemotePlayback disablePictureInPicture x-webkit-airplay="deny" hidden></video>
     </div>
     <div id="card-layer" hidden>
       <div id="card-bars"></div>

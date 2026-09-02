@@ -62,7 +62,7 @@ Everything from here - more channels, your name, your messages, your feeds - hap
 
 Open `http://localhost:1982/config` and the whole network is on one screen, in the order you would set a station up:
 
-1. **Server** - the port it answers on, and the release it is running.
+1. **Server** - the port it answers on, the release it is running, and, on a Pi, restart and shut down.
 2. **Display** - the set: CRT mode, text size, overscan, clock format, and the daily reload that keeps a kiosk healthy.
 3. **Channels** - the dial and its schedules, and how the dial is turned.
 4. **Channel Preview** - everything on channel 0: the guide's name and tagline, how many half hours the grid covers, how fast the lineup crawls, and the color it is drawn on.
@@ -153,6 +153,7 @@ For anyone building their own tuner source or listener (the bus carries events, 
 - `GET /api/tune` answers `{"seq":N,"last":{...},"listeners":N}` - the last command and how many displays are listening, useful for checking a remote is wired up. It never reports a current channel, because the server doesn't hold one.
 - `GET /api/events` emits `hello` (`{"seq":N,"build":"..."}`, your baseline on connect and reconnect; `build` is a hash of the display files, and a display that reconnects to a different one reloads), `tune` (a command with its `seq` - apply each seq once), and `config` (`{"version":...}` after a control-room save - the display reloads on it).
 - Both tune endpoints answer 403 while HTTP tuning is switched off in the control room.
+- `GET /api/system` answers `{"model":"Raspberry Pi 3 Model B Plus Rev 1.3","pi":true,"power":true}`. `POST /api/system` with `{"cmd":"restart"}` or `{"cmd":"shutdown"}` stops the station, flushes the disks, and hands over to systemd. It needs the same `x-cable82-config: 1` header a config save does, and it answers 403 unless the machine is a Pi whose user can power it without a password.
 - `GET /api/version` answers `{"version":"v0.4.0","release":"v0.4.0","build":"...","repo":"..."}` - what release this install is running, read from the checkout once at startup. `release` is set only when the checkout sits exactly on a tag; both are `null` for a zip download or a copy vendored inside another repo, rather than a guessed version.
 - `POST /api/channels/durations` is internal - the display reporting probed video durations back to the server's cache. It requires the same `x-cable82-config: 1` header as config saves.
 
@@ -292,6 +293,11 @@ Replace `pi` (both places) with your own username if it differs: `whoami` tells 
 `which node` confirms the path on the `ExecStart` line.
 Then `sudo systemctl enable --now cable82`, and `systemctl status cable82` should say `active (running)` with the broadcasting lines in its log.
 When a new release comes out, see [Updating](#updating): one line, and the TV takes care of itself.
+
+Once the service is running, the control room's **Server** group grows a **Power** panel with Restart and Shut down.
+Both stop the station and flush the disks before handing over to systemd, which is the part that keeps a memory card intact, and each button asks twice before it does anything.
+They only appear on a Raspberry Pi whose user can run `sudo` without a password, which is the default on Raspberry Pi OS; anywhere else the panel stays hidden.
+Shutting down still leaves the Pi powered: wait for the green light to stop blinking, then pull the plug.
 
 ### 3. Chromium in kiosk mode
 

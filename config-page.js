@@ -883,6 +883,70 @@
       : "Build " + v.build + ". Past the last tag, or with local edits.";
   }
 
+  // Restart and shut down, offered only where they would work: a Raspberry Pi
+  // whose user can power it without a password. Each button arms first and
+  // fires on the second press, because there is no undo for either.
+  async function loadPower() {
+    let sys = null;
+    try {
+      const r = await fetch("api/system", { cache: "no-store" });
+      if (r.ok) sys = await r.json();
+    } catch (e) {
+      /* an older server: leave the panel hidden */
+    }
+    if (!sys || !sys.power) return;
+    $("p-power").hidden = false;
+    if (sys.model) $("p-power").querySelector(".hint").textContent += " This one is a " + sys.model + ".";
+    wirePowerButton("restartHost", "restartNote", "restart", "Restart", "Restarting. The picture goes dark and comes back in about a minute.");
+    wirePowerButton("shutdownHost", "shutdownNote", "shutdown", "Shut down", "Shutting down. When the green light stops blinking it is safe to pull the power.");
+  }
+
+  function wirePowerButton(id, noteId, cmd, label, doneText) {
+    const btn = $(id);
+    const note = $(noteId);
+    const first = note.textContent;
+    let armed = false;
+    let timer = null;
+    const disarm = () => {
+      armed = false;
+      clearTimeout(timer);
+      btn.textContent = label + "…";
+      btn.classList.remove("armed");
+      note.textContent = first;
+    };
+    btn.addEventListener("click", async () => {
+      if (!armed) {
+        armed = true;
+        btn.textContent = "Press again to " + label.toLowerCase();
+        btn.classList.add("armed");
+        note.textContent = "Nothing has happened yet.";
+        timer = setTimeout(disarm, 6000);
+        return;
+      }
+      clearTimeout(timer);
+      btn.disabled = true;
+      btn.textContent = label + "ing…";
+      try {
+        const r = await fetch("api/system", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-cable82-config": "1" },
+          body: JSON.stringify({ cmd }),
+        });
+        if (!r.ok) throw new Error(await r.text());
+        note.textContent = doneText;
+        setStatus(doneText, "ok");
+        $("save").disabled = true;
+        $("restartHost").disabled = true;
+        $("shutdownHost").disabled = true;
+      } catch (e) {
+        btn.disabled = false;
+        disarm();
+        note.textContent = "It did not go through: " + String(e.message || e).slice(0, 80);
+        setStatus("Could not " + label.toLowerCase() + " the machine.", "err");
+      }
+    });
+  }
+
   // The group nav follows the scroll, so the progression is always placed.
   function wireGroupNav() {
     const head = document.querySelector("header.masthead");
@@ -934,6 +998,7 @@
     $("f-musicVolume").addEventListener("input", updateVolumeOut);
     wireGroupNav();
     loadVersion();
+    loadPower();
     $("save").addEventListener("click", save);
     $("revert").addEventListener("click", load);
     load();
