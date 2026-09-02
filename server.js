@@ -680,7 +680,7 @@ function createApp(opts = {}) {
         const evt = { seq: ++tuneSeq, cmd };
         if (cmd === "set") {
           const n = Math.round(Number(raw.channel));
-          if (!Number.isFinite(n) || n < 1 || n > 999) return send(res, 400, "SET NEEDS A CHANNEL NUMBER");
+          if (!Number.isFinite(n) || n < 0 || n > 999) return send(res, 400, "SET NEEDS A CHANNEL NUMBER (0-999)");
           evt.channel = n;
         }
         lastTune = evt;

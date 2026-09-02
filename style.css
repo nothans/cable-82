@@ -261,7 +261,7 @@ html, body { height: 100%; background: var(--letterbox); }
 /* Channel layers sit above the bulletin board inside the same stage. Only
    the visible channel does work; hidden layers are stopped, not paused. */
 
-#video-layer, #card-layer, #external-layer {
+#video-layer, #card-layer, #external-layer, #guide-layer {
   position: absolute;
   inset: 0;
   z-index: 40;
@@ -299,6 +299,104 @@ html, body { height: 100%; background: var(--letterbox); }
 #card-clock { font-size: calc(var(--u) * 28); }
 #card-name { font-size: calc(var(--u) * 18); letter-spacing: 0.08em; }
 #card-msg { font-size: calc(var(--u) * 13); line-height: 1.7; letter-spacing: 0.1em; }
+
+/* Channel 0: the guide. Built after the cable preview channels that ran on
+   an Amiga in a headend closet: a masthead, three half-hour columns, and the
+   lineup crawling up the screen. Flat broadcast blue rather than the
+   purple-to-blue gradient the original used, which is the one thing about
+   that look that has not aged. */
+#guide-layer {
+  display: flex;
+  flex-direction: column;
+  background: var(--c-blue);
+  color: var(--c-white);
+  overflow: hidden;
+}
+#guide-layer[hidden] { display: none; }
+
+#guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(var(--u) * 10) calc(var(--u) * 16) calc(var(--u) * 6);
+  border-bottom: calc(var(--u) * 2) solid var(--c-white);
+}
+
+/* The wordmark: the name with a ring cut around it, the way every guide
+   channel of the period drew an ellipse through its logo. */
+#guide-logo { display: inline-block; }
+/* The ring belongs to the wordmark alone. The tagline sits clear of it, or a
+   long one would read straight through the ellipse. */
+#guide-logo .cv-mark {
+  position: relative;
+  display: inline-block;
+  padding: calc(var(--u) * 4) calc(var(--u) * 16);
+}
+#guide-logo .cv-word {
+  position: relative;
+  z-index: 1;
+  font-size: calc(var(--u) * 30);
+  letter-spacing: 0.06em;
+  display: block;
+}
+#guide-logo .cv-ring {
+  position: absolute;
+  inset: 0;
+  border: calc(var(--u) * 2) solid var(--c-white);
+  border-radius: 50%;
+  transform: rotate(-7deg);
+  opacity: 0.85;
+}
+#guide-logo .cv-sub {
+  display: block;
+  margin-top: calc(var(--u) * 8);
+  padding-left: calc(var(--u) * 4);
+  font-size: calc(var(--u) * 10);
+  letter-spacing: 0.32em;
+  color: var(--c-yellow);
+}
+#guide-logo .cv-sub[hidden] { display: none; }
+#guide-clock { font-size: calc(var(--u) * 22); letter-spacing: 0.04em; }
+
+/* The column heads and the rows share one grid so the columns line up. */
+#guide-cols,
+.guide-row {
+  display: grid;
+  grid-template-columns: calc(var(--u) * 150) repeat(var(--slots, 3), 1fr);
+  gap: calc(var(--u) * 2);
+}
+#guide-cols {
+  padding: calc(var(--u) * 6) calc(var(--u) * 10) calc(var(--u) * 4);
+  font-size: calc(var(--u) * 14);
+  color: var(--c-yellow);
+}
+#guide-cols .gc-slot { text-align: center; }
+
+#guide-view { flex: 1; position: relative; overflow: hidden; padding: 0 calc(var(--u) * 10) calc(var(--u) * 8); }
+/* The crawling list gets its own layer: on a moving layer the browser drops
+   subpixel antialiasing, which otherwise fringes every letter in color. */
+#guide-rows {
+  position: absolute;
+  left: calc(var(--u) * 10);
+  right: calc(var(--u) * 10);
+  top: 0;
+  will-change: transform;
+  -webkit-font-smoothing: antialiased;
+}
+
+.guide-row { margin-bottom: calc(var(--u) * 2); font-size: calc(var(--u) * 13); }
+.guide-row > * {
+  background: rgba(0, 0, 0, 0.22);
+  padding: calc(var(--u) * 7) calc(var(--u) * 8);
+  min-height: calc(var(--u) * 30);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guide-row .g-ch { display: flex; gap: calc(var(--u) * 8); align-items: baseline; }
+.guide-row .g-num { color: var(--c-yellow); min-width: calc(var(--u) * 26); text-align: right; }
+.guide-row .g-cell.is-offair,
+.guide-row .g-cell.is-unknown { color: var(--c-white); opacity: 0.62; }
 
 /* Tuning static: a small noise canvas scaled up reads like real snow. */
 #tuner-snow {

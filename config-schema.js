@@ -48,8 +48,15 @@
   // Channels: the dial. bulletin is the classic CABLE 82 board, video is a
   // folder of files played on the broadcast clock, external is a URL in a
   // frame (how ws4kp joins the dial without being absorbed).
-  const CHANNEL_TYPES = new Set(["bulletin", "video", "external"]);
+  const CHANNEL_TYPES = new Set(["bulletin", "video", "guide", "external"]);
   const OFFAIR_MODES = new Set(["testcard", "bars", "snow", "bulletin"]);
+  // The guide channel's own name, and what an unnamed channel is called.
+  const GUIDE_NAME = "CABLEVUE";
+  function DEFAULT_CHANNEL_NAME(type, number, stationName, previewName) {
+    if (type === "bulletin") return stationName;
+    if (type === "guide") return previewName || PREVIEW_DEFAULTS.name;
+    return "CHANNEL " + number;
+  }
   const CHANNEL_ORDERS = new Set(["sequence", "shuffle-daily"]);
   const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
   // A channel folder is one plain path segment under channels/ - no
@@ -59,6 +66,11 @@
   // into the program every so many minutes. everyMinutes 0 means breaks
   // only between programs; the range tops out at a movie-length act.
   const BREAKS = { everyMinutes: { min: 0, max: 240, dflt: 15 }, spots: { min: 1, max: 20, dflt: 3 } };
+  // The guide channel: how many half-hour columns fit across, how long a
+  // screenful takes to crawl past, and whether the clock counts seconds the
+  // way a headend guide's did.
+  const GUIDE = { slots: { min: 2, max: 4, dflt: 3 }, scrollSeconds: { min: 4, max: 120, dflt: 14 } };
+  const PREVIEW_DEFAULTS = { name: "CABLEVUE", tagline: "WHAT'S ON, AND WHAT'S NEXT" };
 
   // "HH:MM" -> minutes since midnight, or null. Shared by validation here
   // and the air-state math in the display.
@@ -213,6 +225,15 @@
       pageCycle: ["blue", "green", "red", "cyan"],
       headerBg: "blue",
       crawlBg: "ink",
+    },
+    // Channel Preview: the guide channel's own name, tagline, grid, and look.
+    preview: {
+      name: PREVIEW_DEFAULTS.name,
+      tagline: PREVIEW_DEFAULTS.tagline,
+      slots: 3,
+      scrollSeconds: 14,
+      seconds: true,
+      background: "blue",
     },
     overscanPercent: 7,
     // Per-axis overscan margins; both fall back to overscanPercent, because
@@ -383,12 +404,13 @@
         errors.push("CHANNEL WITH UNKNOWN TYPE SKIPPED: " + String(c && c.type));
         continue;
       }
-      const rawNumber = Number(c.number);
-      const number = Number.isFinite(rawNumber) && rawNumber >= 1 && rawNumber <= 999 ? Math.round(rawNumber) : NaN;
+      // 0 is a real channel (the guide lives there), so a cleared number
+      // input has to arrive as null or "" rather than 0, or an empty field
+      // would silently claim channel 0. The control room sends null.
+      const rawNumber = c.number === null || c.number === "" ? NaN : Number(c.number);
+      const number = Number.isFinite(rawNumber) && rawNumber >= 0 && rawNumber <= 999 ? Math.round(rawNumber) : NaN;
       if (!Number.isFinite(number)) {
-        // A cleared number input arrives as 0; clamping it would invent a
-        // surprise channel 1, so skip loudly instead.
-        errors.push("CHANNEL WITHOUT A VALID NUMBER (1-999) SKIPPED");
+        errors.push("CHANNEL WITHOUT A VALID NUMBER (0-999) SKIPPED");
         continue;
       }
       if (seen.has(number)) {
@@ -398,7 +420,7 @@
       const ch = {
         number,
         type: c.type,
-        name: sanitize(c.name, 40) || (c.type === "bulletin" ? cfg.channelName : "CHANNEL " + number),
+        name: sanitize(c.name, 40) || DEFAULT_CHANNEL_NAME(c.type, number, cfg.channelName, cfg.preview && cfg.preview.name),
         enabled: c.enabled !== false,
       };
       if (c.type === "video") {
@@ -432,6 +454,9 @@
       out.push(ch);
     }
     if (!out.length) {
+      // Out of the box: the guide on 0 and the board on 82, the two channels
+      // a small cable system always had of its own.
+      out.push({ number: 0, name: (cfg.preview && cfg.preview.name) || GUIDE_NAME, type: "guide", enabled: true });
       out.push({ number: 82, name: cfg.channelName, type: "bulletin", enabled: true });
     }
     // The dial is ordered by number; the number IS the order. Sort before
@@ -564,6 +589,20 @@
       .map((m) => ({ text: sanitize(m.text, 200), color: typeof m.color === "string" ? m.color : null }))
       .filter((m) => m.text);
 
+    const rawPrev = raw.preview && typeof raw.preview === "object" ? raw.preview : {};
+    cfg.preview = {
+      name: sanitize(rawPrev.name, 40) || PREVIEW_DEFAULTS.name,
+      // A cleared tagline is a choice: the wordmark stands alone. Only an
+      // absent one falls back to the default.
+      tagline: rawPrev.tagline === undefined ? PREVIEW_DEFAULTS.tagline : sanitize(rawPrev.tagline, 60),
+      slots: Math.round(clampNum(rawPrev.slots, GUIDE.slots.min, GUIDE.slots.max, GUIDE.slots.dflt)),
+      scrollSeconds: Math.round(
+        clampNum(rawPrev.scrollSeconds, GUIDE.scrollSeconds.min, GUIDE.scrollSeconds.max, GUIDE.scrollSeconds.dflt)
+      ),
+      seconds: rawPrev.seconds !== false,
+      background: typeof rawPrev.background === "string" && PALETTE[rawPrev.background] ? rawPrev.background : "blue",
+    };
+
     cfg.channels = validateChannels(raw, cfg, errors);
     cfg.tuner = validateTuner(raw.tuner);
 
@@ -597,6 +636,7 @@
     parseHM,
     FOLDER_RE,
     BREAKS,
+    GUIDE,
     windowSegments,
     validateConfig,
   };

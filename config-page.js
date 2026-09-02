@@ -34,6 +34,7 @@
   const CHANNEL_TYPE_OPTIONS = [
     ["bulletin", "Bulletin board"],
     ["video", "Video folder"],
+    ["guide", "Guide (what is on)"],
     ["external", "External page"],
   ];
   const OFFAIR_OPTIONS = [
@@ -143,9 +144,11 @@
     channels.forEach((ch, i) => {
       const head = el("div", { class: "ch-head" }, [
         el("input", {
-          class: "ch-number", type: "number", min: 1, max: 999, value: ch.number != null ? ch.number : "",
+          class: "ch-number", type: "number", min: 0, max: 999, value: ch.number != null ? ch.number : "",
           "aria-label": "Channel number", placeholder: "82",
-          onchange: (e) => { ch.number = Number(e.target.value); renderChannels(); },
+          // An empty field must stay empty: Number("") is 0, and 0 is the
+          // guide's channel, so a cleared box would claim it.
+          onchange: (e) => { const v = e.target.value.trim(); ch.number = v === "" ? null : Number(v); renderChannels(); },
         }),
         el("input", {
           class: "ch-name", type: "text", maxlength: 40, value: ch.name || "",
@@ -169,6 +172,8 @@
       const body = el("div", { class: "ch-body" });
       if (ch.type === "bulletin") {
         body.appendChild(el("span", { class: "note" }, "Shows the board: the page rotation below is this channel's lineup."));
+      } else if (ch.type === "guide") {
+        body.appendChild(el("span", { class: "note" }, "What is on every channel. Its settings are in Channel Preview above."));
       } else if (ch.type === "external") {
         body.appendChild(el("input", {
           type: "url", style: "flex:1;min-width:14em", value: ch.url || "", placeholder: "http://localhost:8080/  (ws4kp, say)",
@@ -500,6 +505,13 @@
     $("f-crawlSeparator").value = crawl.separator != null ? crawl.separator : "  ■  ";
 
     const colors = cfg.colors || {};
+    const prev = cfg.preview || {};
+    $("f-previewName").value = prev.name || "CABLEVUE";
+    $("f-previewTagline").value = prev.tagline === undefined ? "" : prev.tagline;
+    $("f-previewSlots").value = prev.slots != null ? prev.slots : 3;
+    $("f-previewScroll").value = prev.scrollSeconds != null ? prev.scrollSeconds : 14;
+    $("f-previewSeconds").checked = prev.seconds !== false;
+    fillColorSelect("f-previewBg", prev.background || "blue");
     fillColorSelect("f-headerBg", colors.headerBg || "blue");
     fillColorSelect("f-crawlBg", colors.crawlBg || "ink");
 
@@ -752,6 +764,14 @@
         template: $("f-cheerTemplate").value,
       },
       channels: channels.map((c) => JSON.parse(JSON.stringify(c))),
+      preview: {
+        name: $("f-previewName").value.trim(),
+        tagline: $("f-previewTagline").value.trim(),
+        slots: Math.round(S.clampNum($("f-previewSlots").value, 2, 4, 3)),
+        scrollSeconds: Math.round(S.clampNum($("f-previewScroll").value, 4, 120, 14)),
+        seconds: $("f-previewSeconds").checked,
+        background: $("f-previewBg").value,
+      },
       tuner: {
         sources: {
           keyboard: $("f-tunerKeyboard").checked,

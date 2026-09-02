@@ -468,12 +468,22 @@ test("listenUrls leads with localhost and lists every LAN IPv4 address", () => {
 
 // ---------- channels, the dial, and the tuner bus ----------
 
-test("GET /api/config synthesizes a one-channel dial for a legacy config", async () => {
+test("GET /api/config synthesizes the out-of-the-box dial for a legacy config", async () => {
   const r = await fetch(base + "/api/config");
   const j = await r.json();
-  assert.equal(j.config.channels.length, 1);
-  assert.equal(j.config.channels[0].number, 82);
-  assert.equal(j.config.channels[0].type, "bulletin");
+  // A config from before the guide existed still gets one: the guide on 0 and
+  // the board on 82 are what a system has before anyone adds a channel.
+  assert.equal(j.config.channels.length, 2);
+  assert.equal(j.config.channels[0].number, 0);
+  assert.equal(j.config.channels[0].type, "guide");
+  assert.equal(j.config.channels[0].name, "CABLEVUE");
+  assert.equal(j.config.channels[1].number, 82);
+  assert.equal(j.config.channels[1].type, "bulletin");
+  // and the preview channel's own settings come with it
+  assert.equal(j.config.preview.name, "CABLEVUE");
+  assert.equal(j.config.preview.slots, 3);
+  assert.equal(j.config.preview.background, "blue");
+  assert.ok(j.config.preview.tagline.length > 0);
   assert.equal(j.config.tuner.wrap, true);
   assert.equal(j.config.tuner.cut, "static");
 });
@@ -706,7 +716,7 @@ test("405 responses carry an Allow header", async () => {
   assert.equal(d.headers.get("allow"), "POST");
 });
 
-test("schema accepts an overnight window and skips channel number 0", async () => {
+test("schema accepts an overnight window, and 0 is a channel like any other", async () => {
   const upstreamPort = upstream.address().port;
   writeConfig({
     ...configFor(upstreamPort),
@@ -719,8 +729,8 @@ test("schema accepts an overnight window and skips channel number 0", async () =
   }, 6);
   const j = await (await fetch(base + "/api/config")).json();
   const nums = j.config.channels.map((c) => c.number);
-  assert.deepEqual(nums, [9, 82]); // number 0 skipped, never clamped to 1
-  const nine = j.config.channels[0];
+  assert.deepEqual(nums, [0, 9, 82]); // 0 belongs to whoever asks for it
+  const nine = j.config.channels[1];
   assert.equal(nine.schedule.length, 1);
   assert.equal(nine.schedule[0].start, "20:00");
   assert.equal(nine.schedule[0].end, "01:00"); // overnight window kept as written

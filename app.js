@@ -289,11 +289,12 @@
     return parts.length ? parts.join(separator) : fallback;
   }
 
-  function formatClock(d, mode) {
+  function formatClock(d, mode, opts) {
     const mm = String(d.getMinutes()).padStart(2, "0");
-    if (mode === "24h") return String(d.getHours()).padStart(2, "0") + ":" + mm;
+    const ss = (opts && opts.seconds) ? ":" + String(d.getSeconds()).padStart(2, "0") : "";
+    if (mode === "24h") return String(d.getHours()).padStart(2, "0") + ":" + mm + ss;
     const h = d.getHours() % 12 || 12;
-    return h + ":" + mm + " " + (d.getHours() < 12 ? "AM" : "PM");
+    return h + ":" + mm + ss + " " + (d.getHours() < 12 ? "AM" : "PM");
   }
 
   // Format a sunrise/sunset string. Open-Meteo returns it already in the
@@ -348,6 +349,73 @@
     };
   }
 
+  // The broadcast clock's origin: an arbitrary fixed point every channel's
+  // playlist position is measured from, so two sets agree to the frame.
+  const EPOCH = Date.UTC(2026, 0, 1);
+
+  // ---------------------------------------------------------- the guide
+
+  // A program's on-screen name, from its filename. Strips the extension, a
+  // leading track number ("02 "), and an episode tag ("S01.E03."), then puts
+  // the separators back to spaces: "02 Design for Dreaming (1956).mp4"
+  // becomes "DESIGN FOR DREAMING (1956)".
+  function programTitle(file) {
+    let t = String(file || "").replace(/\.[a-z0-9]+$/i, "");
+    t = t.replace(/^\s*\d{1,3}[\s._-]+/, "");
+    t = t.replace(/^s\d{1,2}[\s._-]*e\d{1,3}[\s._-]*/i, "");
+    t = t.replace(/[._]+/g, " ").replace(/\s+/g, " ").trim();
+    return t.toUpperCase() || "PROGRAM";
+  }
+
+  // The half-hour slots a guide page shows: the one we are in now, then the
+  // ones after it. A guide always starts its grid on the half hour, which is
+  // why a listing that began at 8:12 still reads as the 8:00 column.
+  function guideSlots(date, count) {
+    const first = new Date(date.getTime());
+    first.setMinutes(first.getMinutes() < 30 ? 0 : 30, 0, 0);
+    const out = [];
+    for (let i = 0; i < (count || 3); i++) out.push(new Date(first.getTime() + i * 30 * 60000));
+    return out;
+  }
+
+  // What one channel is showing at a moment. Video channels answer from the
+  // same broadcast clock the player runs on, so the guide can never disagree
+  // with the picture; everything else answers for what it is.
+  function programAt(channel, lib, date, epochMs) {
+    if (!channel || channel.enabled === false) return null;
+    if (channel.type === "guide") return { title: "PROGRAM GUIDE", kind: "guide" };
+    if (channel.type === "bulletin") return { title: "COMMUNITY BULLETIN BOARD", kind: "bulletin" };
+    if (channel.type === "external") return { title: "LIVE", kind: "external" };
+    const state = airState(channel, date);
+    if (!state.onAir) return { title: "OFF AIR", kind: "offair" };
+    const files = (lib && lib.files) || [];
+    if (!files.length) return { title: "NO PROGRAMS", kind: "empty" };
+    const tl = channelTimeline(channel, files, (lib && lib.spots) || [], date);
+    const pos = positionAt(tl, date.getTime(), epochMs);
+    if (!pos) return { title: "TO BE ANNOUNCED", kind: "unknown" };
+    const seg = tl[pos.index];
+    return { title: programTitle(seg.file), kind: "program", file: seg.file };
+  }
+
+  // The grid: a row per channel, and within a row the cells merged wherever
+  // the same program runs across more than one slot.
+  function guideGrid(channels, libs, date, count, epochMs) {
+    const slots = guideSlots(date, count);
+    const rows = [];
+    for (const ch of channels) {
+      if (!ch || ch.enabled === false) continue;
+      const cells = [];
+      slots.forEach((slot, i) => {
+        const p = programAt(ch, libs && libs[ch.number], slot, epochMs) || { title: "", kind: "empty" };
+        const last = cells[cells.length - 1];
+        if (last && last.title === p.title && last.kind === p.kind) last.span += 1;
+        else cells.push({ title: p.title, kind: p.kind, span: 1, slot: i });
+      });
+      rows.push({ number: ch.number, name: ch.name, type: ch.type, cells });
+    }
+    return { slots, rows };
+  }
+
   window.Cable82 = {
     PALETTE,
     PALETTE_CRT,
@@ -370,6 +438,11 @@
     seededShuffle,
     channelTimeline,
     airState,
+    EPOCH,
+    programTitle,
+    guideSlots,
+    programAt,
+    guideGrid,
     nextChannelIndex,
     VOLUME_STEPS,
     nextVolumeStep,
@@ -929,6 +1002,13 @@
         cardName: document.getElementById("card-name"),
         cardMsg: document.getElementById("card-msg"),
         external: document.getElementById("external-layer"),
+        guide: document.getElementById("guide-layer"),
+        guideClock: document.getElementById("guide-clock"),
+        guideName: document.getElementById("guide-name"),
+        guideTagline: document.getElementById("guide-tagline"),
+        guideCols: document.getElementById("guide-cols"),
+        guideView: document.getElementById("guide-view"),
+        guideRows: document.getElementById("guide-rows"),
         snow: document.getElementById("tuner-snow"),
         bug: document.getElementById("channel-bug"),
         blank: document.getElementById("tuner-blank"),
@@ -1032,8 +1112,130 @@
         L.card.hidden = true;
       }
 
+      // ---------------- the guide (channel 0)
+      // The lineup, drawn from the same dial and the same broadcast clock the
+      // tuner runs on. It redraws on the half hour, and crawls when the lineup
+      // is taller than the screen.
+      let guideTimers = [];
+      let guideScroll = null;
+
+      function guideRowEl(row) {
+        const el = document.createElement("div");
+        el.className = "guide-row";
+        const ch = document.createElement("div");
+        ch.className = "g-ch";
+        const num = document.createElement("span");
+        num.className = "g-num";
+        num.textContent = row.number;
+        const name = document.createElement("span");
+        name.className = "g-name";
+        name.textContent = row.name;
+        ch.append(num, name);
+        el.appendChild(ch);
+        for (const cell of row.cells) {
+          const c = document.createElement("div");
+          c.className = "g-cell is-" + cell.kind;
+          c.style.gridColumn = "span " + cell.span;
+          c.textContent = cell.title;
+          el.appendChild(c);
+        }
+        return el;
+      }
+
+      // The preview channel's own settings live with the station's, next to
+      // the board's, so one guide channel or two both read the same lineup.
+      function guideOpts() {
+        const p = cfg.preview || {};
+        return {
+          name: p.name || "CABLEVUE",
+          tagline: p.tagline === undefined ? "" : p.tagline,
+          slots: p.slots || 3,
+          scrollSeconds: p.scrollSeconds || 14,
+          seconds: p.seconds !== false,
+          background: p.background || "blue",
+        };
+      }
+
+      function guideDraw(channel) {
+        const now = new Date();
+        const opts = guideOpts();
+        L.guideName.textContent = opts.name;
+        L.guideTagline.textContent = opts.tagline;
+        L.guideTagline.hidden = !opts.tagline;
+        L.guide.style.background = resolveColor(opts.background, "blue", cfg.crtMode ? PALETTE_CRT : PALETTE);
+        const grid = guideGrid(dial, libraries, now, opts.slots, EPOCH);
+        // the rows live in a different subtree, so the count goes on the layer
+        L.guide.style.setProperty("--slots", opts.slots);
+        L.guideCols.textContent = "";
+        const chHead = document.createElement("div");
+        chHead.className = "gc-ch";
+        L.guideCols.appendChild(chHead);
+        for (const slot of grid.slots) {
+          const h = document.createElement("div");
+          h.className = "gc-slot";
+          h.textContent = formatClock(slot, cfg.timeFormat);
+          L.guideCols.appendChild(h);
+        }
+        L.guideRows.textContent = "";
+        for (const row of grid.rows) L.guideRows.appendChild(guideRowEl(row));
+        // A lineup taller than the screen crawls, and the rows are drawn twice
+        // so the loop has no seam.
+        const rowsHeight = L.guideRows.scrollHeight;
+        const viewHeight = L.guideView.clientHeight;
+        guideScroll = null;
+        L.guideRows.style.transform = "translateY(0)";
+        if (rowsHeight > viewHeight) {
+          for (const row of grid.rows) L.guideRows.appendChild(guideRowEl(row));
+          guideScroll = { y: 0, loop: rowsHeight, speed: viewHeight / opts.scrollSeconds };
+        }
+      }
+
+      function guideStart(channel) {
+        L.guide.hidden = false; // measured below: a hidden layer has no height
+        guideDraw(channel);
+        // The folder listings live behind /api/channels and are normally
+        // fetched by the video player. The guide needs them too, and it may
+        // well be the first channel anyone tunes to, so ask and redraw.
+        fetchChannels()
+          .then(() => { if (!L.guide.hidden) guideDraw(channel); })
+          .catch(() => { /* the grid still lists the dial, just without titles */ });
+        const withSeconds = guideOpts().seconds;
+        const tick = () => {
+          L.guideClock.textContent = formatClock(new Date(), cfg.timeFormat, { seconds: withSeconds });
+        };
+        tick();
+        guideTimers.push(setInterval(tick, 1000));
+        // Redraw when the half hour turns over, then every half hour after.
+        const now = new Date();
+        const msToSlot = (30 - (now.getMinutes() % 30)) * 60000 - now.getSeconds() * 1000 - now.getMilliseconds();
+        guideTimers.push(setTimeout(() => {
+          guideDraw(channel);
+          guideTimers.push(setInterval(() => guideDraw(channel), 30 * 60000));
+        }, msToSlot + 500));
+        let last = performance.now();
+        const step = (t) => {
+          if (!guideScroll) { guideTimers.raf = requestAnimationFrame(step); last = t; return; }
+          guideScroll.y += ((t - last) / 1000) * guideScroll.speed;
+          if (guideScroll.y >= guideScroll.loop) guideScroll.y -= guideScroll.loop;
+          // Whole pixels only: a fractional offset makes the browser
+          // subpixel-antialias every line, which fringes the text in color.
+          L.guideRows.style.transform = "translateY(" + -Math.round(guideScroll.y) + "px)";
+          last = t;
+          guideTimers.raf = requestAnimationFrame(step);
+        };
+        guideTimers.raf = requestAnimationFrame(step);
+      }
+
+      function guideStop() {
+        for (const t of guideTimers) { clearInterval(t); clearTimeout(t); }
+        if (guideTimers.raf) cancelAnimationFrame(guideTimers.raf);
+        guideTimers = [];
+        guideScroll = null;
+        L.guide.hidden = true;
+        L.guideRows.textContent = "";
+      }
+
       // ---------------- video renderer
-      const EPOCH = Date.UTC(2026, 0, 1); // arbitrary fixed origin for the loop
       // Two <video> buffers inside the layer: `vid` is on the air, `standby`
       // cues the next program while the current one plays, so a boundary is
       // a cut - the way a station does it - not a load.
@@ -1416,6 +1618,11 @@
           return stops;
         }
         bulletin.suspend();
+        if (channel.type === "guide") {
+          guideStart(channel);
+          stops.push(guideStop);
+          return stops;
+        }
         if (channel.type === "external") {
           const iframe = document.createElement("iframe");
           // The sandbox keeps a framed page (ws4kp, anything) from

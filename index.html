@@ -60,6 +60,29 @@
       <div id="card-name"></div>
       <div id="card-msg"></div>
     </div>
+    <!-- Channel 0: the guide. A masthead with the clock, then the grid, and
+         the rows crawl upward when there are more channels than fit. -->
+    <div id="guide-layer" hidden>
+      <div id="guide-head">
+        <div id="guide-logo">
+          <span class="cv-mark">
+            <span class="cv-word" id="guide-name">CABLEVUE</span>
+            <span class="cv-ring" aria-hidden="true"></span>
+          </span>
+          <span class="cv-sub" id="guide-tagline"></span>
+        </div>
+        <div id="guide-clock">--:--</div>
+      </div>
+      <div id="guide-cols">
+        <div class="gc-ch"></div>
+        <div class="gc-slot"></div>
+        <div class="gc-slot"></div>
+        <div class="gc-slot"></div>
+      </div>
+      <div id="guide-view">
+        <div id="guide-rows"></div>
+      </div>
+    </div>
     <div id="external-layer" hidden></div>
     <canvas id="tuner-snow" width="160" height="120" hidden></canvas>
     <div id="tuner-blank" hidden></div>

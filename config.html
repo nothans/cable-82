@@ -157,14 +157,9 @@
     font-size: 22px;
     letter-spacing: 2px;
     text-transform: uppercase;
-    margin: 0;
+    margin: 0 0 var(--sp-3);
     padding-bottom: var(--sp-1);
     border-bottom: 2px solid var(--line-strong);
-  }
-  .group-sub {
-    color: var(--ink-dim);
-    font-size: 13.5px;
-    margin: var(--sp-1) 0 var(--sp-2);
   }
 
   .release-line { padding: 6px 0; }
@@ -427,7 +422,7 @@
         <a id="version" class="version" href="https://github.com/nothans/cable-82" target="_blank" rel="noopener">&hellip;</a>
       </div>
       <div class="actions">
-        <a id="preview" href="/" target="_blank" rel="noopener"><button type="button" class="ghost small">View channel &#8599;</button></a>
+        <a id="view-channel" href="/" target="_blank" rel="noopener"><button type="button" class="ghost small">View channel &#8599;</button></a>
         <a href="/remote-control" target="_blank" rel="noopener"><button type="button" class="ghost small">Remote control &#8599;</button></a>
       </div>
     </div>
@@ -435,7 +430,8 @@
       <a href="#server">Server</a>
       <a href="#display">Display</a>
       <a href="#channels">Channels</a>
-      <a href="#board">Community board</a>
+      <a href="#preview">Channel Preview</a>
+      <a href="#board">Community Board</a>
     </nav>
   </header>
 
@@ -443,7 +439,6 @@
 
     <section class="group" id="server" aria-labelledby="g-server">
       <h2 class="group-head" id="g-server">Server</h2>
-      <p class="group-sub">Where the station answers, and what it is running.</p>
       <section class="panel" id="p-network">
         <h3>Network</h3>
         <p class="hint">The display, this control room, and the remote all live on this port.</p>
@@ -457,7 +452,7 @@
       </section>
       <section class="panel" id="p-release">
         <h3>Release</h3>
-        <p class="hint">What this install is running, read from the checkout when the server started.</p>
+        <p class="hint">What this install is running.</p>
         <div class="grid">
           <div class="field">
             <label>Version</label>
@@ -475,7 +470,6 @@
 
     <section class="group" id="display" aria-labelledby="g-display">
       <h2 class="group-head" id="g-display">Display</h2>
-      <p class="group-sub">How the picture is drawn, and when the display restarts itself.</p>
       <section class="panel" id="p-picture">
         <h3>Picture</h3>
         <p class="hint">For a real tube fed over composite or an RF modulator. Leave it off on a flat panel.</p>
@@ -483,14 +477,14 @@
           <div class="field">
             <label>Tube</label>
             <div class="toggle"><input type="checkbox" id="f-crtMode"><label for="f-crtMode">CRT mode: softer colors, no drop shadow</label></div>
-            <span class="note">Composite and RF smear saturated red and blue and clip pure white. This calms both.</span>
+            <span class="note">Calms the saturated reds and blues that composite and RF smear.</span>
             <div class="toggle"><input type="checkbox" id="f-crtInkText"><label for="f-crtInkText">Dark text on color pages</label></div>
-            <span class="note">White text smears on some tubes. This only applies while CRT mode is on.</span>
+            <span class="note">For tubes that smear white text. Only applies while CRT mode is on.</span>
           </div>
           <div class="field">
             <label for="f-textScale">Text size</label>
             <input type="number" id="f-textScale" min="1" max="1.5" step="0.05">
-            <span class="note">1 is the original layout. Try 1.25 on a small tube; the big clock stays as it is.</span>
+            <span class="note">1 is the original layout. Try 1.25 on a small tube.</span>
           </div>
           <div class="field">
             <label for="f-overscanX">Overscan margin, sides (%)</label>
@@ -500,13 +494,13 @@
           <div class="field">
             <label for="f-overscanY">Overscan margin, top and bottom (%)</label>
             <input type="number" id="f-overscanY" min="0" max="15" step="1">
-            <span class="note">Tubes rarely crop evenly; set each axis to what yours eats.</span>
+            <span class="note">Raise it if your TV crops the top or bottom edge.</span>
           </div>
         </div>
       </section>
       <section class="panel" id="p-clock">
         <h3>Clock</h3>
-        <p class="hint">How the set writes the time: on the board's header and clock page, on the weather card, and on a video channel's off-air test card.</p>
+        <p class="hint">How the set writes the time, everywhere it shows one.</p>
         <div class="grid">
           <div class="field">
             <label for="f-timeFormat">Clock format</label>
@@ -519,7 +513,7 @@
       </section>
       <section class="panel" id="p-kiosk">
         <h3>Kiosk</h3>
-        <p class="hint">A display left on for weeks needs one clean start a day. Pick a quiet hour.</p>
+        <p class="hint">The hour the display reloads itself. Pick a quiet one.</p>
         <div class="grid">
           <div class="field">
             <label for="f-dailyReloadHour">Daily reload hour</label>
@@ -531,14 +525,13 @@
 
     <section class="group" id="channels" aria-labelledby="g-channels">
       <h2 class="group-head" id="g-channels">Channels</h2>
-      <p class="group-sub">The dial, and what turns it.</p>
       <section class="panel" id="p-dial">
         <h3>The dial</h3>
-        <p class="hint">Ordered by channel number. The bulletin board is a channel; a video channel plays a folder on the broadcast clock, with optional commercial breaks from a second folder; an external channel frames another page (a retro weather app, say).</p>
+        <p class="hint">Ordered by channel number. The bulletin board is a channel; a video channel plays a folder on the broadcast clock, with optional commercial breaks from a second folder; a guide channel lists what is on every channel on the dial; an external channel frames another page (a retro weather app, say).</p>
         <div id="channelList" class="list"></div>
         <button type="button" id="addChannel" class="small add-row">+ Add channel</button>
         <div id="week-grid-wrap" hidden>
-          <p class="hint" style="margin-top:12px">The week, as the schedule reads. Blocks are on-air windows.</p>
+          <p class="hint" style="margin-top:12px">The week as the schedule reads it: blocks are on-air windows.</p>
           <div id="week-grid"></div>
         </div>
       </section>
@@ -575,12 +568,61 @@
       </section>
     </section>
 
+    <section class="group" id="preview" aria-labelledby="g-preview">
+      <h2 class="group-head" id="g-preview">Channel Preview</h2>
+      <section class="panel" id="p-preview-identity">
+        <h3>Identity</h3>
+        <p class="hint">The name and tagline across the top of the guide.</p>
+        <div class="grid">
+          <div class="field">
+            <label for="f-previewName">Channel name</label>
+            <input type="text" id="f-previewName" maxlength="40" placeholder="CABLEVUE">
+            <span class="note">Also names channel 0 on the dial.</span>
+          </div>
+          <div class="field">
+            <label for="f-previewTagline">Tagline</label>
+            <input type="text" id="f-previewTagline" maxlength="60" placeholder="WHAT'S ON, AND WHAT'S NEXT">
+          </div>
+        </div>
+      </section>
+      <section class="panel" id="p-preview-grid">
+        <h3>The grid</h3>
+        <p class="hint">Every channel on the dial is listed.</p>
+        <div class="grid">
+          <div class="field">
+            <label for="f-previewSlots">Half hours across</label>
+            <input type="number" id="f-previewSlots" min="2" max="4" step="1">
+            <span class="note">How far ahead the grid looks: three columns is an hour and a half.</span>
+          </div>
+          <div class="field">
+            <label for="f-previewScroll">Seconds per screenful</label>
+            <input type="number" id="f-previewScroll" min="4" max="120" step="1">
+            <span class="note">How long the lineup takes to crawl one screen. It only crawls when it is taller than the screen.</span>
+          </div>
+          <div class="field">
+            <label>Clock</label>
+            <div class="toggle"><input type="checkbox" id="f-previewSeconds"><label for="f-previewSeconds">Count seconds</label></div>
+            <span class="note">The AM/PM vs 24-hour choice follows the Clock panel under Display.</span>
+          </div>
+        </div>
+      </section>
+      <section class="panel" id="p-preview-colors">
+        <h3>Colors</h3>
+        <p class="hint">The background the grid is drawn on.</p>
+        <div class="grid">
+          <div class="field">
+            <label for="f-previewBg">Background</label>
+            <select id="f-previewBg"></select>
+          </div>
+        </div>
+      </section>
+    </section>
+
     <section class="group" id="board" aria-labelledby="g-board">
-      <h2 class="group-head" id="g-board">Community board</h2>
-      <p class="group-sub">Everything on channel 82: its lineup, what each page shows, and how it looks.</p>
+      <h2 class="group-head" id="g-board">Community Board</h2>
       <section class="panel" id="p-identity">
         <h3>Identity</h3>
-        <p class="hint">The name and tagline across the top of the board. They stand in for the crawl when no feed has anything to say.</p>
+        <p class="hint">The name and tagline across the top of the board.</p>
         <div class="grid">
           <div class="field">
             <label for="f-channelName">Channel name</label>
@@ -594,7 +636,7 @@
       </section>
       <section class="panel" id="p-rotation">
         <h3>Page rotation</h3>
-        <p class="hint">Channel 82's lineup, in order, and how long each page holds. Each visit to a headlines slot shows the next item from that feed.</p>
+        <p class="hint">The board's lineup, in order, and how long each page holds. Each visit to a headlines slot shows the next item from that feed.</p>
         <div id="rotation" class="list"></div>
         <button type="button" id="addSlot" class="small add-row">+ Add page</button>
         <div class="grid" style="margin-top: var(--sp-2);">
@@ -626,7 +668,7 @@
       </section>
       <section class="panel" id="p-weather">
         <h3>Weather</h3>
-        <p class="hint">One weather strip, fed by Open-Meteo (free, no account). Search your town, pick the match, choose units. Add a Weather page to the rotation above to put it on the air. The AM/PM vs 24-hour choice follows the Clock panel under Display.</p>
+        <p class="hint">One weather strip, fed by Open-Meteo (free, no account). Search your town, pick the match, choose units. Add a Weather page to the rotation to put it on the air.</p>
         <div class="field">
           <label>Location</label>
           <div id="wxCurrent" class="wx-current"></div>
@@ -714,7 +756,7 @@
       </section>
       <section class="panel" id="p-music">
         <h3>Music</h3>
-        <p class="hint">Continuous background music behind channel 82's pages, played from the <code>music/</code> folder - drop audio files there and they join the rotation. On a Pi kiosk, launch Chromium with <code>--autoplay-policy=no-user-gesture-required</code> so it plays from boot; on a desktop it starts on your first click.</p>
+        <p class="hint">Continuous background music behind the Community Board, played from the <code>music/</code> folder - drop audio files there and they join the rotation. On a Pi kiosk, launch Chromium with <code>--autoplay-policy=no-user-gesture-required</code> so it plays from boot; on a desktop it starts on your first click.</p>
         <div class="grid">
           <div class="field">
             <label>Playback</label>
@@ -736,7 +778,7 @@
       </section>
       <section class="panel" id="p-colors">
         <h3>Colors</h3>
-        <p class="hint">Pages with no fixed color cycle through the palette you pick. The palette is broadcast-safe on purpose.</p>
+        <p class="hint">Pages with no fixed color cycle through the palette you pick.</p>
         <div class="field">
           <label>Page cycle</label>
           <div id="pageCycle" class="chips"></div>

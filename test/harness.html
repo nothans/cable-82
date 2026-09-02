@@ -348,11 +348,11 @@
     eq(C.nextVolumeStep(1.5), 1);
   });
 
-  t("validateConfig synthesizes the one-channel dial and the tuner", () => {
+  t("validateConfig synthesizes the out-of-the-box dial and the tuner", () => {
     const cfg = C.validateConfig({}).cfg;
-    eq(cfg.channels.length, 1);
-    eq(cfg.channels[0].number, 82);
-    eq(cfg.channels[0].type, "bulletin");
+    eq(cfg.channels.length, 2); // the guide on 0, the board on 82
+    eq(cfg.channels[1].number, 82);
+    eq(cfg.channels[1].type, "bulletin");
     eq(cfg.tuner.sources.keyboard, true);
     eq(cfg.tuner.wrap, true);
     eq(cfg.tuner.cut, "static");
@@ -423,7 +423,7 @@
     eq(s.resumeText, "PROGRAMMING RESUMES SATURDAY 8:00 PM");
   });
 
-  t("validateConfig keeps an overnight window and skips channel number 0", () => {
+  t("validateConfig keeps an overnight window, and 0 is a channel like any other", () => {
     const cfg = C.validateConfig({
       channels: [
         { number: 0, type: "video", folder: "cartoons" },
@@ -431,8 +431,8 @@
           schedule: [{ days: ["sat"], start: "20:00", end: "01:00" }] },
       ],
     }).cfg;
-    eq(cfg.channels.map((c) => c.number), [9]); // 0 skipped, never clamped to 1
-    eq(cfg.channels[0].schedule, [{ days: ["sat"], start: "20:00", end: "01:00" }]);
+    eq(cfg.channels.map((c) => c.number), [0, 9]); // 0 belongs to whoever asks for it
+    eq(cfg.channels[1].schedule, [{ days: ["sat"], start: "20:00", end: "01:00" }]);
   });
 
   // ---- programmed channel: the composite timeline
@@ -529,6 +529,114 @@
     eq(r.cfg.channels[0].breaks, { folder: "spots", everyMinutes: 20, spots: 4 });
     eq(r.cfg.channels[1].breaks, undefined);
     ok(r.errors.some((e) => e.includes("CHANNEL 4")), "the drop is reported");
+  });
+
+  // ---- the guide (channel 0) ----
+
+  t("programTitle cleans a filename into a listing", () => {
+    eq(C.programTitle("02 Design for Dreaming (1956).mp4"), "DESIGN FOR DREAMING (1956)");
+    eq(C.programTitle("S01.E13 Duck and Cover.mkv"), "DUCK AND COVER");
+    eq(C.programTitle("hasty_gormet.1987.mp4"), "HASTY GORMET 1987");
+    eq(C.programTitle(""), "PROGRAM");
+  });
+
+  t("guideSlots starts on the half hour and steps by thirty minutes", () => {
+    const at = new Date(2026, 8, 2, 20, 12, 0);
+    const slots = C.guideSlots(at, 3).map((d) => d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0"));
+    eq(slots.join(" "), "20:00 20:30 21:00");
+    const late = C.guideSlots(new Date(2026, 8, 2, 23, 47, 0), 3).map((d) => d.getDate() + "@" + d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0"));
+    eq(late.join(" "), "2@23:30 3@0:00 3@0:30", "the grid crosses midnight");
+  });
+
+  t("programAt answers for each kind of channel", () => {
+    const at = new Date(2026, 8, 2, 20, 12, 0);
+    eq(C.programAt({ number: 0, type: "guide", enabled: true }, null, at, C.EPOCH).title, "PROGRAM GUIDE");
+    eq(C.programAt({ number: 82, type: "bulletin", enabled: true }, null, at, C.EPOCH).title, "COMMUNITY BULLETIN BOARD");
+    eq(C.programAt({ number: 9, type: "external", enabled: true }, null, at, C.EPOCH).title, "LIVE");
+    const empty = C.programAt({ number: 2, type: "video", enabled: true, mode: "continuous" }, { files: [] }, at, C.EPOCH);
+    eq(empty.title, "NO PROGRAMS");
+    const shut = C.programAt(
+      { number: 5, type: "video", enabled: true, mode: "schedule", schedule: [] },
+      { files: [] }, at, C.EPOCH
+    );
+    eq(shut.title, "OFF AIR", "a scheduled channel with no window is off the air");
+  });
+
+  t("programAt reads a video channel off the same broadcast clock the player uses", () => {
+    const films = [
+      { file: "01 Duck and Cover.mp4", url: "channels/r/a.mp4", duration: 3600 },
+      { file: "02 Design for Dreaming.mp4", url: "channels/r/b.mp4", duration: 1800 },
+    ];
+    const ch = { number: 2, type: "video", enabled: true, mode: "continuous", order: "sequence", folder: "r" };
+    const at = new Date(2026, 8, 2, 20, 12, 0);
+    const tl = C.channelTimeline(ch, films, [], at);
+    const pos = C.positionAt(tl, at.getTime(), C.EPOCH);
+    eq(C.programAt(ch, { files: films }, at, C.EPOCH).title, C.programTitle(tl[pos.index].file));
+  });
+
+  t("guideGrid merges a program that runs across slots", () => {
+    const films = [
+      { file: "Long Movie.mp4", url: "channels/r/a.mp4", duration: 5400 },
+      { file: "Short.mp4", url: "channels/r/b.mp4", duration: 1800 },
+    ];
+    const dial = [
+      { number: 0, type: "guide", name: "CABLEVUE", enabled: true },
+      { number: 2, type: "video", name: "R", enabled: true, mode: "continuous", order: "sequence", folder: "r" },
+      { number: 7, type: "video", name: "OFF", enabled: false, mode: "continuous", order: "sequence", folder: "r" },
+    ];
+    const g = C.guideGrid(dial, { 2: { files: films, spots: [] } }, new Date(2026, 8, 2, 20, 12, 0), 3, C.EPOCH);
+    eq(g.rows.length, 2, "a channel off the dial is not listed");
+    eq(g.slots.length, 3);
+    eq(g.rows[0].cells.length, 1, "the guide's own row is one cell across");
+    eq(g.rows[0].cells[0].span, 3);
+    const spans = g.rows[1].cells.reduce((n, c) => n + c.span, 0);
+    eq(spans, 3, "the cells of a row always cover every slot");
+  });
+
+  t("validateConfig ships the guide on 0 and the board on 82", () => {
+    const out = C.validateConfig({}).cfg.channels;
+    eq(out.map((c) => c.number + ":" + c.type).join(" "), "0:guide 82:bulletin");
+    eq(out[0].name, "CABLEVUE");
+  });
+
+  t("the preview channel's settings sit with the station's, and clamp", () => {
+    const p = C.validateConfig({}).cfg.preview;
+    eq(p.name, "CABLEVUE");
+    eq(p.slots, 3);
+    eq(p.scrollSeconds, 14);
+    eq(p.seconds, true);
+    eq(p.background, "blue");
+    ok(p.tagline.length > 0, "a default tagline ships");
+    const custom = C.validateConfig({
+      preview: { name: "TV GUIDE 82", tagline: "", slots: 9, scrollSeconds: 1, seconds: false, background: "magenta" },
+    }).cfg.preview;
+    eq(custom.name, "TV GUIDE 82");
+    eq(custom.tagline, "", "a cleared tagline stays cleared");
+    eq(custom.slots, 4);
+    eq(custom.scrollSeconds, 4);
+    eq(custom.seconds, false);
+    eq(custom.background, "magenta");
+    eq(C.validateConfig({ preview: { background: "chartreuse" } }).cfg.preview.background, "blue", "an unknown color falls back");
+  });
+
+  t("the guide channel takes its name from the preview settings", () => {
+    const cfg = C.validateConfig({ preview: { name: "TV GUIDE 82" }, channels: [{ number: 0, type: "guide" }] }).cfg;
+    eq(cfg.channels[0].name, "TV GUIDE 82");
+    const named = C.validateConfig({ preview: { name: "TV GUIDE 82" }, channels: [{ number: 0, type: "guide", name: "PREVIEW" }] }).cfg;
+    eq(named.channels[0].name, "PREVIEW", "a name set on the dial wins");
+  });
+
+  t("a cleared channel number is skipped, and 0 is a real channel", () => {
+    const r = C.validateConfig({ channels: [{ number: null, type: "bulletin" }, { number: 0, type: "guide" }] });
+    ok(r.errors.some((e) => /VALID NUMBER/.test(e)), "the empty one is called out");
+    eq(r.cfg.channels.map((c) => c.number).join(","), "0");
+  });
+
+  t("formatClock counts seconds when asked", () => {
+    const d = new Date(2026, 8, 2, 20, 4, 7);
+    eq(C.formatClock(d, "12h"), "8:04 PM");
+    eq(C.formatClock(d, "12h", { seconds: true }), "8:04:07 PM");
+    eq(C.formatClock(d, "24h", { seconds: true }), "20:04:07");
   });
 
   const summary = document.getElementById("summary");
