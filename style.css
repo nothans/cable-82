@@ -318,8 +318,9 @@ html, body { height: 100%; background: var(--letterbox); }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: calc(var(--u) * 10) calc(var(--u) * 16) calc(var(--u) * 6);
-  border-bottom: calc(var(--u) * 2) solid var(--c-white);
+  gap: calc(var(--u) * 16);
+  padding: var(--ovy) var(--ovx) calc(var(--u) * 8);
+  border-bottom: calc(var(--u) * 3) solid var(--c-white);
 }
 
 /* The wordmark: the name with a ring cut around it, the way every guide
@@ -335,9 +336,10 @@ html, body { height: 100%; background: var(--letterbox); }
 #guide-logo .cv-word {
   position: relative;
   z-index: 1;
-  font-size: calc(var(--u) * 30);
+  font-size: calc(var(--u) * 34 * var(--ts));
   letter-spacing: 0.06em;
   display: block;
+  white-space: nowrap;
 }
 #guide-logo .cv-ring {
   position: absolute;
@@ -351,50 +353,66 @@ html, body { height: 100%; background: var(--letterbox); }
   display: block;
   margin-top: calc(var(--u) * 8);
   padding-left: calc(var(--u) * 4);
-  font-size: calc(var(--u) * 10);
-  letter-spacing: 0.32em;
+  font-size: calc(var(--u) * 15 * var(--ts));
+  letter-spacing: 0.22em;
   color: var(--c-yellow);
+  white-space: nowrap;
 }
 #guide-logo .cv-sub[hidden] { display: none; }
-#guide-clock { font-size: calc(var(--u) * 22); letter-spacing: 0.04em; }
+#guide-clock { font-size: calc(var(--u) * 28 * var(--ts)); letter-spacing: 0.04em; white-space: nowrap; }
 
 /* The column heads and the rows share one grid so the columns line up. */
 #guide-cols,
 .guide-row {
   display: grid;
-  grid-template-columns: calc(var(--u) * 150) repeat(var(--slots, 3), 1fr);
-  gap: calc(var(--u) * 2);
+  grid-template-columns: calc(var(--u) * 165 * var(--ts)) repeat(var(--slots, 3), 1fr);
+  gap: calc(var(--u) * 3);
 }
 #guide-cols {
-  padding: calc(var(--u) * 6) calc(var(--u) * 10) calc(var(--u) * 4);
-  font-size: calc(var(--u) * 14);
+  padding: calc(var(--u) * 8) var(--ovx) calc(var(--u) * 6);
+  font-size: calc(var(--u) * 20 * var(--ts));
   color: var(--c-yellow);
 }
 #guide-cols .gc-slot { text-align: center; }
 
-#guide-view { flex: 1; position: relative; overflow: hidden; padding: 0 calc(var(--u) * 10) calc(var(--u) * 8); }
+#guide-view { flex: 1; position: relative; overflow: hidden; padding: 0 var(--ovx) var(--ovy); }
 /* The crawling list gets its own layer: on a moving layer the browser drops
    subpixel antialiasing, which otherwise fringes every letter in color. */
 #guide-rows {
   position: absolute;
-  left: calc(var(--u) * 10);
-  right: calc(var(--u) * 10);
+  left: var(--ovx);
+  right: var(--ovx);
   top: 0;
   will-change: transform;
   -webkit-font-smoothing: antialiased;
 }
 
-.guide-row { margin-bottom: calc(var(--u) * 2); font-size: calc(var(--u) * 13); }
+.guide-row { margin-bottom: calc(var(--u) * 3); font-size: calc(var(--u) * 22 * var(--ts)); }
 .guide-row > * {
   background: rgba(0, 0, 0, 0.22);
-  padding: calc(var(--u) * 7) calc(var(--u) * 8);
-  min-height: calc(var(--u) * 30);
+  padding: calc(var(--u) * 8) calc(var(--u) * 10);
+  min-height: calc(var(--u) * 40 * var(--ts));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.guide-row .g-ch { display: flex; gap: calc(var(--u) * 8); align-items: baseline; }
-.guide-row .g-num { color: var(--c-yellow); min-width: calc(var(--u) * 26); text-align: right; }
+/* A long program title wraps inside its cell rather than being cut off at
+   one line. Two lines is what fits a half hour before the row gets taller
+   than the tube can spare. */
+.guide-row .g-cell { display: flex; align-items: flex-start; white-space: normal; }
+.guide-row .g-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  line-height: 1.15;
+}
+.guide-row .g-ch { display: flex; gap: calc(var(--u) * 10); align-items: baseline; min-width: 0; }
+/* The name gives way before the number does: a channel you cannot name is
+   still a channel you can tune. */
+.guide-row .g-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.guide-row .g-num { color: var(--c-yellow); min-width: calc(var(--u) * 40 * var(--ts)); text-align: right; flex: 0 0 auto; }
 .guide-row .g-cell.is-offair,
 .guide-row .g-cell.is-unknown { color: var(--c-white); opacity: 0.62; }
 

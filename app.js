@@ -1118,6 +1118,8 @@
       // is taller than the screen.
       let guideTimers = [];
       let guideScroll = null;
+      let guideLineup = [];
+      let guideResize = null;
 
       function guideRowEl(row) {
         const el = document.createElement("div");
@@ -1136,7 +1138,12 @@
           const c = document.createElement("div");
           c.className = "g-cell is-" + cell.kind;
           c.style.gridColumn = "span " + cell.span;
-          c.textContent = cell.title;
+          // The title lives in its own span so it can be clamped to two lines
+          // no matter how tall the row grows around it.
+          const t = document.createElement("span");
+          t.className = "g-title";
+          t.textContent = cell.title;
+          c.appendChild(t);
           el.appendChild(c);
         }
         return el;
@@ -1178,16 +1185,29 @@
         }
         L.guideRows.textContent = "";
         for (const row of grid.rows) L.guideRows.appendChild(guideRowEl(row));
-        // A lineup taller than the screen crawls, and the rows are drawn twice
-        // so the loop has no seam.
-        const rowsHeight = L.guideRows.scrollHeight;
-        const viewHeight = L.guideView.clientHeight;
-        guideScroll = null;
+        guideLineup = grid.rows;
+        guideFit();
+      }
+
+      // Does the lineup fit, and if not how fast does it crawl? Kept separate
+      // from drawing because the answer changes after the first paint: the
+      // bitmap face lands late and every row and the masthead grow with it.
+      // Idempotent on purpose, so it can run as often as it likes.
+      function guideFit() {
+        if (!guideLineup.length) return;
+        const n = guideLineup.length;
+        while (L.guideRows.childElementCount > n) L.guideRows.lastElementChild.remove();
+        const lineup = L.guideRows.scrollHeight;
+        const view = L.guideView.clientHeight;
         L.guideRows.style.transform = "translateY(0)";
-        if (rowsHeight > viewHeight) {
-          for (const row of grid.rows) L.guideRows.appendChild(guideRowEl(row));
-          guideScroll = { y: 0, loop: rowsHeight, speed: viewHeight / opts.scrollSeconds };
+        if (lineup <= view || !view) {
+          guideScroll = null;
+          return;
         }
+        // Drawn twice so the loop has no seam: the second copy is what scrolls
+        // up into the gap the first one leaves.
+        for (const row of guideLineup) L.guideRows.appendChild(guideRowEl(row));
+        guideScroll = { y: 0, loop: lineup, speed: view / guideOpts().scrollSeconds };
       }
 
       function guideStart(channel) {
@@ -1199,6 +1219,12 @@
         fetchChannels()
           .then(() => { if (!L.guide.hidden) guideDraw(channel); })
           .catch(() => { /* the grid still lists the dial, just without titles */ });
+        // The bitmap face lands after the first paint and everything grows with
+        // it, so watch the boxes instead of guessing when layout has settled.
+        if (typeof ResizeObserver === "function") {
+          guideResize = new ResizeObserver(() => guideFit());
+          guideResize.observe(L.guideView);
+        }
         const withSeconds = guideOpts().seconds;
         const tick = () => {
           L.guideClock.textContent = formatClock(new Date(), cfg.timeFormat, { seconds: withSeconds });
@@ -1227,6 +1253,9 @@
       }
 
       function guideStop() {
+        if (guideResize) guideResize.disconnect();
+        guideResize = null;
+        guideLineup = [];
         for (const t of guideTimers) { clearInterval(t); clearTimeout(t); }
         if (guideTimers.raf) cancelAnimationFrame(guideTimers.raf);
         guideTimers = [];
