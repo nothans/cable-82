@@ -173,10 +173,10 @@
       if (ch.type === "bulletin") {
         body.appendChild(el("span", { class: "note" }, "Shows the board: the page rotation below is this channel's lineup."));
       } else if (ch.type === "guide") {
-        body.appendChild(el("span", { class: "note" }, "What is on every channel. Its settings are in Channel Preview above."));
+        // Nothing to set on the row: the guide has its own group in the room.
       } else if (ch.type === "external") {
         body.appendChild(el("input", {
-          type: "url", style: "flex:1;min-width:14em", value: ch.url || "", placeholder: "http://localhost:8080/  (ws4kp, say)",
+          type: "url", style: "flex:1;min-width:14em", value: ch.url || "", placeholder: "http://localhost:8080/  (ws4kp)",
           "aria-label": "External URL",
           onchange: (e) => { ch.url = e.target.value; },
         }));
@@ -207,7 +207,8 @@
         }
       }
 
-      const rows = [head, body];
+      // A guide row has an empty body; leaving it out keeps the row tight.
+      const rows = body.childElementCount ? [head, body] : [head];
       if (ch.type === "video") {
         // Commercial breaks: spots from a second folder, cut into the program
         // every so many minutes. "(none)" is the plain channel.
