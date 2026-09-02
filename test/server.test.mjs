@@ -106,6 +106,9 @@ before(async () => {
     JSON.stringify({ "S01.E1.mp4": 31.2 })
   );
   fs.mkdirSync(path.join(channelsDir, "empty"));
+  fs.mkdirSync(path.join(channelsDir, "spots"));
+  for (const f of ["ad-1.mp4", "ad-2.mp4"]) fs.writeFileSync(path.join(channelsDir, "spots", f), "x");
+  fs.writeFileSync(path.join(channelsDir, "spots", ".durations.json"), JSON.stringify({ "ad-1.mp4": 30 }));
   app = createApp({
     configPath,
     musicDir,
@@ -685,4 +688,53 @@ test("schema accepts an overnight window and skips channel number 0", async () =
   assert.equal(nine.schedule[0].start, "20:00");
   assert.equal(nine.schedule[0].end, "01:00"); // overnight window kept as written
   writeConfig(configFor(upstreamPort), 8);
+});
+
+test("schema keeps a channel's breaks, clamps the numbers, drops a same-folder break", async () => {
+  const { validateConfig, BREAKS } = require("../config-schema.js");
+  const r = validateConfig({
+    channels: [
+      { number: 82, type: "bulletin" },
+      { number: 3, type: "video", folder: "movies", breaks: { folder: "spots", everyMinutes: 999, spots: 0 } },
+      { number: 4, type: "video", folder: "movies", breaks: { folder: "spots" } },
+      { number: 5, type: "video", folder: "movies", breaks: { folder: "movies", everyMinutes: 10, spots: 2 } },
+      { number: 6, type: "video", folder: "movies", breaks: { folder: "../etc", everyMinutes: 10, spots: 2 } },
+      { number: 7, type: "video", folder: "movies", breaks: { folder: "", everyMinutes: 10, spots: 2 } },
+    ],
+  });
+  const by = Object.fromEntries(r.cfg.channels.map((c) => [c.number, c]));
+  assert.deepEqual(by[3].breaks, { folder: "spots", everyMinutes: BREAKS.everyMinutes.max, spots: BREAKS.spots.min });
+  assert.deepEqual(by[4].breaks, { folder: "spots", everyMinutes: BREAKS.everyMinutes.dflt, spots: BREAKS.spots.dflt });
+  assert.equal(by[5].breaks, undefined); // the program folder cannot be its own break
+  assert.ok(r.errors.some((e) => e.includes("CHANNEL 5") && e.includes("PROGRAM FOLDER")));
+  assert.equal(by[6].breaks, undefined);
+  assert.ok(r.errors.some((e) => e.includes("CHANNEL 6") && e.includes("BAD BREAKS FOLDER")));
+  assert.equal(by[7].breaks, undefined); // an empty folder is "no breaks", not an error
+  assert.ok(!r.errors.some((e) => e.includes("CHANNEL 7")));
+  assert.equal(by[7].folder, "movies"); // the channel itself is untouched
+});
+
+test("GET /api/channels carries a programmed channel's spots with their cached durations", async () => {
+  const upstreamPort = upstream.address().port;
+  writeConfig(
+    Object.assign(configFor(upstreamPort), {
+      channels: [
+        { number: 82, type: "bulletin" },
+        { number: 3, type: "video", folder: "cartoons", breaks: { folder: "spots", everyMinutes: 0, spots: 2 } },
+        { number: 90, type: "video", folder: "cartoons" },
+      ],
+    }),
+    10
+  );
+  const j = await (await fetch(base + "/api/channels")).json();
+  const three = j.channels.find((c) => c.number === 3);
+  assert.equal(three.breaks.folder, "spots");
+  assert.deepEqual(three.breaks.files.map((f) => f.file), ["ad-1.mp4", "ad-2.mp4"]);
+  assert.equal(three.breaks.files[0].duration, 30); // cached
+  assert.equal(three.breaks.files[1].duration, null); // not probed yet
+  assert.equal(three.breaks.files[0].url, "channels/spots/ad-1.mp4");
+  const ninety = j.channels.find((c) => c.number === 90);
+  assert.equal(ninety.breaks, undefined); // a plain channel stays plain
+  assert.ok(j.folders.some((f) => f.folder === "spots" && f.files === 2)); // the picker sees the spots folder too
+  writeConfig(configFor(upstreamPort), 12);
 });

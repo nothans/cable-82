@@ -426,6 +426,102 @@
     eq(cfg.channels[0].schedule, [{ days: ["sat"], start: "20:00", end: "01:00" }]);
   });
 
+  // ---- programmed channel: the composite timeline
+  const day = new Date(2026, 8, 2, 12, 0, 0);
+  const film = (file, duration) => ({ file, url: "channels/movies/" + file, duration });
+  const spot = (file, duration) => ({ file, url: "channels/spots/" + file, duration });
+  const programmed = (breaks, order) => ({ number: 3, folder: "movies", order: order || "sequence", breaks });
+
+  t("channelTimeline: a plain channel is one whole segment per file", () => {
+    const tl = C.channelTimeline({ number: 3, folder: "movies", order: "sequence" }, [film("a.mp4", 100), film("b.mp4", null)], [], day);
+    eq(tl.map((s) => [s.file, s.from, s.to, s.duration]), [["a.mp4", 0, 100, 100], ["b.mp4", 0, null, null]]);
+  });
+
+  t("channelTimeline: a movie is cut into even acts with a break after every act", () => {
+    // 100 min film, breaks every 30: 3 acts of 33m20s, 2 spots after each, incl. the last
+    const ch = programmed({ folder: "spots", everyMinutes: 30, spots: 2 });
+    const tl = C.channelTimeline(ch, [film("movie.mp4", 6000)], [spot("s1.mp4", 30), spot("s2.mp4", 15), spot("s3.mp4", 20)], day);
+    eq(tl.map((s) => s.file), ["movie.mp4", "s1.mp4", "s2.mp4", "movie.mp4", "s3.mp4", "s1.mp4", "movie.mp4", "s2.mp4", "s3.mp4"]);
+    eq(tl[0].from, 0); eq(tl[0].to, 2000); eq(tl[0].duration, 2000);
+    eq(tl[3].from, 2000); eq(tl[3].to, 4000);
+    eq(tl[6].from, 4000); eq(tl[6].to, 6000);
+    eq(tl[1].from, 0); eq(tl[1].to, 30); eq(tl[1].duration, 30); // a spot always runs whole
+    const total = tl.reduce((a, s) => a + s.duration, 0);
+    ok(Math.abs(total - (6000 + 30 + 15 + 20 + 30 + 15 + 20)) < 1e-9, "the loop is the film plus its spots");
+  });
+
+  t("channelTimeline: the spot pool cycles across programs and a break separates them", () => {
+    const ch = programmed({ folder: "spots", everyMinutes: 0, spots: 1 });
+    const tl = C.channelTimeline(ch, [film("a.mp4", 600), film("b.mp4", 600), film("c.mp4", 600)], [spot("s1.mp4", 30), spot("s2.mp4", 30)], day);
+    eq(tl.map((s) => s.file), ["a.mp4", "s1.mp4", "b.mp4", "s2.mp4", "c.mp4", "s1.mp4"]);
+    eq(tl[0].to, 600); // everyMinutes 0: one act per program
+  });
+
+  t("channelTimeline: acts round to the nearest count, never below one", () => {
+    const ch = programmed({ folder: "spots", everyMinutes: 15, spots: 1 });
+    const pool = [spot("s1.mp4", 30)];
+    // 22 minutes -> 1.47 -> 1 act; 23 minutes -> 1.53 -> 2 acts; 7 min cartoon -> 1 act
+    eq(C.channelTimeline(ch, [film("a.mp4", 22 * 60)], pool, day).length, 2);
+    eq(C.channelTimeline(ch, [film("a.mp4", 23 * 60)], pool, day).length, 4);
+    eq(C.channelTimeline(ch, [film("toon.mp4", 7 * 60)], pool, day).length, 2);
+  });
+
+  t("channelTimeline: an unknown program duration means the plain timeline (degraded, as today)", () => {
+    const ch = programmed({ folder: "spots", everyMinutes: 15, spots: 1 });
+    const tl = C.channelTimeline(ch, [film("a.mp4", 1200), film("b.mp4", null)], [spot("s1.mp4", 30)], day);
+    eq(tl.map((s) => s.file), ["a.mp4", "b.mp4"]);
+    eq(tl[1].to, null);
+  });
+
+  t("channelTimeline: unprobed spots sit out of the pool; no usable spot means no breaks", () => {
+    const ch = programmed({ folder: "spots", everyMinutes: 0, spots: 2 });
+    const one = C.channelTimeline(ch, [film("a.mp4", 600)], [spot("s1.mp4", 30), spot("s2.mp4", null)], day);
+    eq(one.map((s) => s.file), ["a.mp4", "s1.mp4", "s1.mp4"]);
+    const none = C.channelTimeline(ch, [film("a.mp4", 600)], [spot("s2.mp4", null)], day);
+    eq(none.map((s) => s.file), ["a.mp4"]);
+    eq(C.channelTimeline(ch, [film("a.mp4", 600)], [], day).length, 1);
+  });
+
+  t("channelTimeline: positionAt walks the composite and lands inside an act", () => {
+    const ch = programmed({ folder: "spots", everyMinutes: 30, spots: 1 });
+    const tl = C.channelTimeline(ch, [film("movie.mp4", 3600)], [spot("s1.mp4", 30)], day);
+    // acts of 1800s: [movie 0-1800][s1 30][movie 1800-3600][s1 30] = 3660 loop
+    const p = C.positionAt(tl, 1900 * 1000, 0); // 1900s in: 70s into act two
+    eq(p.index, 2);
+    eq(p.offset, 70);
+    eq(tl[p.index].from + p.offset, 1870); // the frame the movie shows: resume point + offset
+    const q = C.positionAt(tl, 1815 * 1000, 0); // in the first break
+    eq(q.index, 1);
+    eq(q.offset, 15);
+    eq(C.positionAt(tl, 3660 * 1000, 0), { index: 0, offset: 0 }); // the loop closes
+  });
+
+  t("channelTimeline: shuffle-daily orders programs and spots on separate seeds", () => {
+    const ch = programmed({ folder: "spots", everyMinutes: 0, spots: 1 }, "shuffle-daily");
+    const films = ["a", "b", "c", "d", "e", "f"].map((n) => film(n + ".mp4", 600));
+    const spots = ["a", "b", "c", "d", "e", "f"].map((n) => spot(n + ".mp4", 30));
+    const tl = C.channelTimeline(ch, films, spots, day);
+    const programOrder = tl.filter((s) => s.url.startsWith("channels/movies/")).map((s) => s.file);
+    const spotOrder = tl.filter((s) => s.url.startsWith("channels/spots/")).map((s) => s.file);
+    eq([...programOrder].sort(), films.map((f) => f.file));
+    eq([...spotOrder].sort(), spots.map((f) => f.file));
+    eq(programOrder, C.seededShuffle(films, "2026-9-2#3").map((f) => f.file));
+    ok(programOrder.join() !== spotOrder.join(), "the spots do not mirror the programs' order");
+    eq(C.channelTimeline(ch, films, spots, new Date(2026, 8, 2, 23, 59)).map((s) => s.file), tl.map((s) => s.file));
+  });
+
+  t("validateConfig keeps a channel's breaks and drops a same-folder one", () => {
+    const r = C.validateConfig({
+      channels: [
+        { number: 3, type: "video", folder: "movies", breaks: { folder: "spots", everyMinutes: 20, spots: 4 } },
+        { number: 4, type: "video", folder: "movies", breaks: { folder: "movies" } },
+      ],
+    });
+    eq(r.cfg.channels[0].breaks, { folder: "spots", everyMinutes: 20, spots: 4 });
+    eq(r.cfg.channels[1].breaks, undefined);
+    ok(r.errors.some((e) => e.includes("CHANNEL 4")), "the drop is reported");
+  });
+
   const summary = document.getElementById("summary");
   summary.textContent = pass + " passed, " + fail + " failed";
   summary.className = fail ? "bad" : "ok";

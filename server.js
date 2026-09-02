@@ -552,7 +552,11 @@ function createApp(opts = {}) {
     const channels = [];
     for (const ch of (cfg && cfg.channels) || []) {
       if (ch.type !== "video") continue;
-      channels.push({ number: ch.number, folder: ch.folder, files: listChannelFiles(ch.folder) || [] });
+      const entry = { number: ch.number, folder: ch.folder, files: listChannelFiles(ch.folder) || [] };
+      // A programmed channel carries its spots too: one fetch gives the
+      // display everything the composite timeline is built from.
+      if (ch.breaks) entry.breaks = { folder: ch.breaks.folder, files: listChannelFiles(ch.breaks.folder) || [] };
+      channels.push(entry);
     }
     res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
     res.end(JSON.stringify({ folders, channels }));

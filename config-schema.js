@@ -55,6 +55,10 @@
   // A channel folder is one plain path segment under channels/ - no
   // separators, no traversal, no leading dot. The server enforces it again.
   const FOLDER_RE = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}$/;
+  // Commercial breaks on a video channel: spots from a second folder, cut
+  // into the program every so many minutes. everyMinutes 0 means breaks
+  // only between programs; the range tops out at a movie-length act.
+  const BREAKS = { everyMinutes: { min: 0, max: 240, dflt: 15 }, spots: { min: 1, max: 20, dflt: 3 } };
 
   // "HH:MM" -> minutes since midnight, or null. Shared by validation here
   // and the air-state math in the display.
@@ -343,6 +347,31 @@
     return segs;
   }
 
+  // Commercial breaks: { folder, everyMinutes, spots } or null for a channel
+  // that plays its folder whole. The spots folder follows the program
+  // folder's rule and must be a different folder - a channel interrupting
+  // itself with itself is a misclick, not a format.
+  function validateBreaks(raw, programFolder, errors, chNumber) {
+    if (!raw || typeof raw !== "object") return null;
+    const folder = typeof raw.folder === "string" ? raw.folder.trim() : "";
+    if (!folder) return null; // the picker's "(none)"
+    if (!FOLDER_RE.test(folder) || folder.includes("..")) {
+      errors.push("CHANNEL " + chNumber + ": BAD BREAKS FOLDER, BREAKS DROPPED");
+      return null;
+    }
+    if (folder === programFolder) {
+      errors.push("CHANNEL " + chNumber + ": BREAKS FOLDER IS THE PROGRAM FOLDER, BREAKS DROPPED");
+      return null;
+    }
+    const e = BREAKS.everyMinutes;
+    const k = BREAKS.spots;
+    return {
+      folder,
+      everyMinutes: Math.round(clampNum(raw.everyMinutes, e.min, e.max, e.dflt)),
+      spots: Math.round(clampNum(raw.spots, k.min, k.max, k.dflt)),
+    };
+  }
+
   // The dial. Absent or empty -> a one-channel system: the classic board as
   // channel 82, so every existing config upgrades without being edited.
   function validateChannels(raw, cfg, errors) {
@@ -379,6 +408,8 @@
           continue;
         }
         ch.folder = folder;
+        const breaks = validateBreaks(c.breaks, folder, errors, number);
+        if (breaks) ch.breaks = breaks;
         ch.mode = c.mode === "schedule" ? "schedule" : "continuous";
         ch.order = CHANNEL_ORDERS.has(c.order) ? c.order : "sequence";
         ch.offAir = OFFAIR_MODES.has(c.offAir) ? c.offAir : "testcard";
@@ -558,6 +589,7 @@
     weatherText,
     parseHM,
     FOLDER_RE,
+    BREAKS,
     windowSegments,
     validateConfig,
   };

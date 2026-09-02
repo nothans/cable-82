@@ -155,6 +155,48 @@
     return a;
   }
 
+  // A folder's running order for the day: the server's natural sort, or a
+  // shuffle seeded by the date so it holds all day and reshuffles tomorrow.
+  function orderFiles(files, order, seed) {
+    return order === "shuffle-daily" ? seededShuffle(files, seed) : files;
+  }
+
+  // A video channel's air as segments [{ file, url, from, to, duration }],
+  // each a slice of one file, walked by positionAt like any playlist.
+  // Without breaks it is one segment per file, played whole (`to` null
+  // while a duration is unknown: play to the end). With breaks, each
+  // program is cut into acts of about everyMinutes (a 63-minute film at 15
+  // becomes four acts of 15:45), a break of `spots` spots follows every act
+  // - the last one included, so a break separates programs - and the spot
+  // pool cycles across the whole loop so each spot airs as often as the
+  // next. The movie resumes exactly where the break cut it.
+  // Acts need every program duration up front; a spot whose length is not
+  // known yet sits out until the probe learns it. No usable spots (an empty
+  // or unprobed folder) means the program folder plays whole.
+  function channelTimeline(channel, files, spots, date) {
+    const day = date.getFullYear() + "-" + (date.getMonth() + 1) + "-" + date.getDate();
+    const program = orderFiles(files || [], channel.order, day + "#" + channel.number);
+    const b = channel.breaks;
+    const pool = b
+      ? orderFiles((spots || []).filter((f) => f.duration > 0), channel.order, day + "#" + channel.number + "#breaks")
+      : [];
+    const whole = (f) => ({ file: f.file, url: f.url, from: 0, to: f.duration, duration: f.duration });
+    if (!b || !pool.length || program.some((f) => !(f.duration > 0))) return program.map(whole);
+    const actLen = b.everyMinutes * 60;
+    const out = [];
+    let cursor = 0;
+    for (const p of program) {
+      const acts = actLen > 0 ? Math.max(1, Math.round(p.duration / actLen)) : 1;
+      for (let a = 0; a < acts; a++) {
+        const from = (p.duration * a) / acts;
+        const to = a === acts - 1 ? p.duration : (p.duration * (a + 1)) / acts;
+        out.push({ file: p.file, url: p.url, from, to, duration: to - from });
+        for (let k = 0; k < b.spots; k++) out.push(whole(pool[cursor++ % pool.length]));
+      }
+    }
+    return out;
+  }
+
   // Is a scheduled channel on the air at `date`, and when does that change?
   // Returns { onAir, untilMs, resumeText }. untilMs is when the state next
   // flips (so the tuner can set one exact timer instead of polling); for a
@@ -326,6 +368,7 @@
     naturalCompare,
     positionAt,
     seededShuffle,
+    channelTimeline,
     airState,
     nextChannelIndex,
     VOLUME_STEPS,
@@ -997,76 +1040,106 @@
       const vidBufs = videoLayer.querySelectorAll("video");
       let vid = vidBufs[0];
       let standby = vidBufs[1];
-      let playlists = {}; // channel number -> files [{file, url, duration}]
+      let libraries = {}; // channel number -> { files, spots }, each [{file, url, duration}]
       let vidChannel = null;
       let vidStops = [];
       let currentUrl = "";
+      let curTl = []; // the timeline the air was last driven from
+      let curIndex = -1; // its segment on the air
       let degIndex = -1; // sequential fallback while durations are unknown
 
       async function fetchChannels() {
         const r = await fetch("api/channels", { cache: "no-store", signal: AbortSignal.timeout(10000) });
         if (!r.ok) throw new Error("HTTP " + r.status);
         const j = await r.json();
-        playlists = {};
-        for (const c of j.channels || []) playlists[c.number] = c.files || [];
-        return playlists;
+        libraries = {};
+        for (const c of j.channels || []) {
+          libraries[c.number] = { files: c.files || [], spots: (c.breaks && c.breaks.files) || [] };
+        }
+        return libraries;
       }
 
-      function orderedPlaylist(channel, files) {
-        if (channel.order === "shuffle-daily") {
-          const d = new Date();
-          const seed = d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate() + "#" + channel.number;
-          return seededShuffle(files, seed);
-        }
-        return files; // the server already natural-sorts
+      // The channel's air for today: its files (and spots) as a timeline.
+      function timelineFor(channel, lib) {
+        return channelTimeline(channel, lib.files, lib.spots, new Date());
+      }
+
+      // Which pool a file on the air came from, for the duration cache.
+      function poolOf(channel, lib, url) {
+        if (lib.files.some((f) => f.url === url)) return { folder: channel.folder, files: lib.files };
+        if (channel.breaks && lib.spots.some((f) => f.url === url)) return { folder: channel.breaks.folder, files: lib.spots };
+        return null;
+      }
+
+      function postDurations(folder, durations) {
+        fetch("api/channels/durations", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-cable82-config": "1" },
+          body: JSON.stringify({ folder, durations }),
+        }).catch(() => { /* cache miss next boot; the probe will run again */ });
       }
 
       // Learn missing durations from <video> metadata, one file at a time,
-      // and post the batch back so the server's cache fills itself. The clock
-      // can only run when every duration is known; until then playback is
-      // honest sequential.
-      async function probeMissing(channel, files) {
-        const missing = files.filter((f) => f.duration == null);
-        if (!missing.length) return false;
-        const learned = {};
-        for (const f of missing) {
-          if (vidChannel !== channel) break; // tuned away: stop politely
-          const d = await new Promise((resolve) => {
-            const probe = document.createElement("video");
-            const bail = setTimeout(() => {
-              // A hung file must not stall the pass; the clock just waits
-              // for this duration until a later probe learns it.
-              probe.src = "";
-              resolve(null);
-            }, 15000);
-            probe.preload = "metadata";
-            probe.onloadedmetadata = () => { clearTimeout(bail); resolve(probe.duration); };
-            probe.onerror = () => { clearTimeout(bail); resolve(null); };
-            probe.src = f.url;
-          });
-          if (Number.isFinite(d) && d > 0) {
-            f.duration = d;
-            learned[f.file] = d;
+      // and post each folder's batch back so the server's cache fills
+      // itself. The clock can only run when every duration is known; until
+      // then playback is honest sequential. A programmed channel probes its
+      // spots folder too, so the breaks can be cut in.
+      async function probeMissing(channel, lib) {
+        const pools = [{ folder: channel.folder, files: lib.files }];
+        if (channel.breaks) pools.push({ folder: channel.breaks.folder, files: lib.spots });
+        let probed = false;
+        for (const pool of pools) {
+          const missing = pool.files.filter((f) => f.duration == null);
+          if (!missing.length) continue;
+          probed = true;
+          const learned = {};
+          for (const f of missing) {
+            if (vidChannel !== channel) break; // tuned away: stop politely
+            const d = await new Promise((resolve) => {
+              const probe = document.createElement("video");
+              const bail = setTimeout(() => {
+                // A hung file must not stall the pass; the clock just waits
+                // for this duration until a later probe learns it.
+                probe.src = "";
+                resolve(null);
+              }, 15000);
+              probe.preload = "metadata";
+              probe.onloadedmetadata = () => { clearTimeout(bail); resolve(probe.duration); };
+              probe.onerror = () => { clearTimeout(bail); resolve(null); };
+              probe.src = f.url;
+            });
+            if (Number.isFinite(d) && d > 0) {
+              f.duration = d;
+              learned[f.file] = d;
+            }
           }
+          if (Object.keys(learned).length) postDurations(pool.folder, learned);
         }
-        if (Object.keys(learned).length) {
-          fetch("api/channels/durations", {
-            method: "POST",
-            headers: { "content-type": "application/json", "x-cable82-config": "1" },
-            body: JSON.stringify({ folder: channel.folder, durations: learned }),
-          }).catch(() => { /* cache miss next boot; the probe will run again */ });
-        }
-        return true;
+        return probed;
       }
 
-      function preloadNext(pl, index) {
-        if (!pl.length) return;
-        const next = pl[(index + 1) % pl.length];
+      // Park a buffer at a time once it knows its length. The url check
+      // keeps a stale listener from moving a later load.
+      function cueAt(v, url, t) {
+        const go = () => {
+          if (v.getAttribute("src") !== url) return;
+          if (Math.abs(v.currentTime - t) > 0.5) v.currentTime = t;
+        };
+        if (v.readyState >= 1) go();
+        else v.addEventListener("loadedmetadata", go, { once: true });
+      }
+
+      function preloadNext(tl, index) {
+        if (!tl.length) return;
+        const next = tl[(index + 1) % tl.length];
         if (standby.getAttribute("src") !== next.url) {
           standby.preload = "auto";
           standby.src = next.url;
           standby.load();
         }
+        // An act that picks the movie back up is cued at its resume point,
+        // so the cut out of the break lands on the right frame, not frame zero.
+        if (next.from > 0) cueAt(standby, next.url, next.from);
       }
 
       function swapBuffers() {
@@ -1081,47 +1154,65 @@
         vid.hidden = false;
       }
 
-      function videoDrive(channel, files) {
-        if (vidChannel !== channel) return;
-        const pl = orderedPlaylist(channel, files);
-        const pos = positionAt(pl, Date.now(), EPOCH);
-        let targetIndex;
-        let targetOffset = null;
-        if (pos) {
-          targetIndex = pos.index;
-          targetOffset = pos.offset;
-        } else if (currentUrl && !vid.ended && !vid.error) {
-          targetIndex = pl.findIndex((f) => f.url === currentUrl); // degraded: let it play out
+      // Put a segment's file on the air: the cued standby if it holds it, a
+      // cold load otherwise. The same file already up is left alone; the
+      // seek that follows moves within it.
+      function cutTo(seg) {
+        if (currentUrl === seg.url) return;
+        currentUrl = seg.url;
+        if (standby.getAttribute("src") === seg.url && standby.readyState >= 2) {
+          swapBuffers(); // the next program is already cued: cut, don't load
         } else {
-          degIndex = (degIndex + 1) % pl.length;
-          targetIndex = degIndex;
+          vid.src = seg.url;
+          vid.load();
         }
-        if (targetIndex < 0 || targetIndex >= pl.length) targetIndex = 0;
-        const targetUrl = pl[targetIndex].url;
-        if (currentUrl !== targetUrl) {
-          currentUrl = targetUrl;
-          if (standby.getAttribute("src") === targetUrl && standby.readyState >= 2) {
-            swapBuffers(); // the next program is already cued: cut, don't load
-          } else {
-            vid.src = targetUrl;
-            vid.load();
-          }
+      }
+
+      // The segment on the air, if the timeline still agrees with it.
+      function segOnAir(tl) {
+        if (curIndex >= 0 && curIndex < tl.length && tl[curIndex].url === currentUrl) return curIndex;
+        return tl.findIndex((s) => s.url === currentUrl);
+      }
+
+      function videoDrive(channel, lib) {
+        if (vidChannel !== channel) return;
+        const tl = timelineFor(channel, lib);
+        if (!tl.length) return;
+        const pos = positionAt(tl, Date.now(), EPOCH);
+        let target;
+        let offset = null;
+        if (pos) {
+          target = pos.index;
+          offset = pos.offset;
+        } else if (currentUrl && !vid.ended && !vid.error) {
+          target = segOnAir(tl); // degraded: let it play out
+        } else {
+          degIndex = (degIndex + 1) % tl.length;
+          target = degIndex;
         }
+        if (target < 0 || target >= tl.length) target = 0;
+        const seg = tl[target];
+        cutTo(seg);
+        curTl = tl;
+        curIndex = target;
         const v = vid; // the deferred seek must land on this buffer, not a later swap's
+        const want = seg.from + (offset != null ? offset : 0);
         const seek = () => {
-          if (targetOffset != null && Math.abs(v.currentTime - targetOffset) > 1.5) {
-            v.currentTime = targetOffset;
+          if ((offset != null || seg.from > 0) && Math.abs(v.currentTime - want) > 1.5) {
+            v.currentTime = want;
           }
           v.play().catch(() => { /* kiosk runs with autoplay allowed */ });
         };
         if (v.readyState >= 1) seek();
         else v.addEventListener("loadedmetadata", seek, { once: true });
-        preloadNext(pl, targetIndex);
+        preloadNext(tl, target);
       }
 
       async function videoStart(channel) {
         vidChannel = channel;
         currentUrl = "";
+        curTl = [];
+        curIndex = -1;
         degIndex = -1;
         vid.muted = false;
         vid.volume = soundLevel();
@@ -1133,15 +1224,15 @@
         // The folder is the truth and it changes (episodes added over the
         // share, a file deleted mid-week), so every tune re-reads it. The
         // cached list only covers a blip while the server restarts.
-        const readFolder = async () => (await fetchChannels())[channel.number] || null;
-        let files = null;
+        const readLibrary = async () => (await fetchChannels())[channel.number] || null;
+        let lib = null;
         try {
-          files = await readFolder();
+          lib = await readLibrary();
         } catch (e) {
-          files = playlists[channel.number] || null;
+          lib = libraries[channel.number] || null;
         }
         if (vidChannel !== channel) return; // tuned away while fetching
-        if (!files || !files.length) {
+        if (!lib || !lib.files.length) {
           videoLayer.hidden = true;
           cardStart(channel, { resumeText: "NO PROGRAMMING AVAILABLE" }, "testcard");
           vidStops.push(cardStop);
@@ -1150,13 +1241,13 @@
           const retry = setInterval(async () => {
             let again = null;
             try {
-              again = await readFolder();
+              again = await readLibrary();
             } catch (e) { /* still down */ }
-            if (vidChannel !== channel || !again || !again.length) return;
+            if (vidChannel !== channel || !again || !again.files.length) return;
             clearInterval(retry);
             cardStop();
             videoLayer.hidden = false;
-            files = again;
+            lib = again;
             wire();
           }, 30000);
           vidStops.push(() => clearInterval(retry));
@@ -1165,38 +1256,43 @@
         wire();
 
         function wire() {
-          const onEnded = (e) => {
-            if (e.target !== vid) return; // only the on-air buffer airs an ending
-            // A file can play shorter than its cached duration says. What
-            // just ended is ground truth: correct the cache so the clock
-            // converges instead of freeze-looping a phantom tail.
-            const f = files.find((x) => x.url === currentUrl);
+          // A file can play shorter than its cached duration says. What
+          // just ended is ground truth: correct the cache so the clock
+          // converges instead of freeze-looping a phantom tail.
+          const correctDuration = (url) => {
+            const pool = poolOf(channel, lib, url);
+            const f = pool && pool.files.find((x) => x.url === url);
             const actual = vid.currentTime;
             if (f && Number.isFinite(actual) && actual > 1 && f.duration != null && Math.abs(f.duration - actual) > 0.5) {
               f.duration = actual;
-              fetch("api/channels/durations", {
-                method: "POST",
-                headers: { "content-type": "application/json", "x-cable82-config": "1" },
-                body: JSON.stringify({ folder: channel.folder, durations: { [f.file]: actual } }),
-              }).catch(() => { /* corrected next boot instead */ });
+              postDurations(pool.folder, { [f.file]: actual });
             }
-            // Roll straight into the next program - the cued standby makes
+          };
+          // `why` is "file" when the file itself ran out, "act" when a
+          // break is due mid-file; only a real ending says anything about
+          // the file's length.
+          const onEnded = (e, why) => {
+            if (e.target !== vid) return; // only the on-air buffer airs an ending
+            if (why !== "act") correctDuration(currentUrl);
+            // Roll straight into the next segment - the cued standby makes
             // this a cut. Small clock disagreements settle at the next
             // resync (1.5s drift tolerance) and vanish once durations are true.
-            const pl = orderedPlaylist(channel, files);
-            let i = pl.findIndex((x) => x.url === currentUrl);
+            const tl = timelineFor(channel, lib);
+            if (!tl.length) return;
+            let i = segOnAir(tl);
             if (i < 0) i = 0;
-            degIndex = (i + 1) % pl.length; // keep the degraded counter in step
-            const next = pl[degIndex];
-            currentUrl = next.url;
-            if (standby.getAttribute("src") === next.url && standby.readyState >= 2) {
-              swapBuffers();
+            degIndex = (i + 1) % tl.length; // keep the degraded counter in step
+            const next = tl[degIndex];
+            curTl = tl;
+            curIndex = degIndex;
+            if (currentUrl === next.url) {
+              vid.currentTime = next.from; // the same file again: rewind, no reload
             } else {
-              vid.src = next.url;
-              vid.load();
+              cutTo(next);
+              if (next.from > 0) cueAt(vid, next.url, next.from); // a cold load starts at the act, not at 0
             }
             vid.play().catch(() => { /* kiosk allows autoplay */ });
-            preloadNext(pl, degIndex);
+            preloadNext(tl, degIndex);
           };
           const onError = (e) => {
             if (e.target === standby) {
@@ -1211,16 +1307,18 @@
             setTimeout(async () => {
               if (vidChannel !== channel) return;
               try {
-                const fresh = await readFolder();
-                if (fresh && fresh.length) files = fresh;
+                const fresh = await readLibrary();
+                if (fresh && fresh.files.length) lib = fresh;
               } catch (e2) { /* keep the list we have */ }
               if (vidChannel !== channel) return;
               currentUrl = "";
-              videoDrive(channel, files);
+              curIndex = -1;
+              videoDrive(channel, lib);
             }, 1500);
           };
+          const onFileEnded = (e) => onEnded(e, "file");
           for (const b of vidBufs) {
-            b.addEventListener("ended", onEnded);
+            b.addEventListener("ended", onFileEnded);
             b.addEventListener("error", onError);
           }
           // The end of a program is not taken on trust. The Pi's kiosk
@@ -1231,7 +1329,8 @@
           // state, or a clock stopped inside the last second of the file, is
           // the ending; a clock stopped anywhere else (IO stall, decoder
           // wedge) is a reason to drop the source and let videoDrive reload
-          // it at the broadcast clock.
+          // it at the broadcast clock. It also calls the breaks: an act ends
+          // at its mark inside the file, and the movie waits there.
           let watchT = -1;
           let watchSince = 0;
           const endWatch = setInterval(() => {
@@ -1240,37 +1339,44 @@
               return;
             }
             if (vid.ended) {
-              onEnded({ target: vid });
+              onEnded({ target: vid }, "file");
               return;
             }
             const t = vid.currentTime;
             const now = Date.now();
+            const d = vid.duration;
+            const seg = curIndex >= 0 && curTl[curIndex] && curTl[curIndex].url === currentUrl ? curTl[curIndex] : null;
+            const midFile = seg && seg.to != null && !(Number.isFinite(d) && seg.to >= d - 0.5);
+            if (midFile && t >= seg.to) {
+              onEnded({ target: vid }, "act");
+              return;
+            }
             if (t !== watchT) {
               watchT = t;
               watchSince = now;
               return;
             }
             const stalled = now - watchSince;
-            const d = vid.duration;
             if (Number.isFinite(d) && d > 0 && t >= d - 1 && stalled >= 300) {
-              onEnded({ target: vid });
+              onEnded({ target: vid }, "file");
             } else if (stalled >= 4000) {
               currentUrl = "";
-              videoDrive(channel, files);
+              curIndex = -1;
+              videoDrive(channel, lib);
             }
           }, 250);
-          const resync = setInterval(() => videoDrive(channel, files), 30000);
+          const resync = setInterval(() => videoDrive(channel, lib), 30000);
           vidStops.push(() => {
             for (const b of vidBufs) {
-              b.removeEventListener("ended", onEnded);
+              b.removeEventListener("ended", onFileEnded);
               b.removeEventListener("error", onError);
             }
             clearInterval(endWatch);
             clearInterval(resync);
           });
-          videoDrive(channel, files);
-          probeMissing(channel, files).then((probed) => {
-            if (probed && vidChannel === channel) videoDrive(channel, files);
+          videoDrive(channel, lib);
+          probeMissing(channel, lib).then((probed) => {
+            if (probed && vidChannel === channel) videoDrive(channel, lib);
           });
         }
       }
@@ -1287,6 +1393,8 @@
         }
         videoLayer.hidden = true;
         currentUrl = "";
+        curTl = [];
+        curIndex = -1;
       }
 
       // ---------------- the router

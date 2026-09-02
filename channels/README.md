@@ -32,6 +32,7 @@ Schedules, off-air cards, and the tuner are covered in the main README's [Channe
 - **Broadcast, not playback.** The channel's position is computed from the wall clock, so tuning away and back lands you mid-program. Nothing ever "resumes where you left off" - that's a VCR, not a channel.
 - **Formats.** `.mp4`, `.m4v`, `.webm`, `.ogv`, `.mov`. On a Pi 3 B+, H.264 up to ~480p plays comfortably in software; test anything bigger.
 - **`.durations.json`.** The display probes each file's duration once and posts it back; the server caches it in a `.durations.json` inside the folder. Delete the file to force a re-probe. Until every duration is known, the channel plays files sequentially instead of clock-mapped.
+- **Commercial breaks.** A channel can take its spots from a second folder here (set *Breaks from* on the channel in the control room, plus the minutes of program between breaks and the spots per break). Each program is cut into even acts of about that length, a break follows every act, the last one included, so one also separates the programs. Breaks need every duration up front: a spot sits out of the rotation until the display has probed it once, and while any program's length is still unknown the channel plays its programs whole, no breaks.
 
 ## What gets committed
 

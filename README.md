@@ -11,6 +11,7 @@ Features:
 
 - **Community Bulletin Board** - bundled as channel 82: your RSS feeds, news, weather, and local events.
 - **Video channels** - place videos in a folder to define your own channel, like a Saturday-morning cartoon lineup or old 50s movies.
+- **Commercial breaks** - give a video channel a second folder of spots and it cuts them into the program: a few minutes of movie, three commercials, back to the movie where it left off.
 - **External channels** - point a channel at a website to create a channel out of anything.
 - **Flexible tuning** - anything that can trigger a key press, a button press, a GPIO pin, or an HTTP request to the API can change the channel.
 - **Remote control** (`/remote-control`) - a Zenith Space Command drawn in CSS: channel lower, volume, off-on, channel higher, on your phone.
@@ -82,6 +83,12 @@ A video channel can run around the clock or keep **scheduled hours** - dayparts 
 A window whose end time is at or before its start runs overnight into the next morning, so "Saturday 20:00 to 01:00" is one window, not two.
 Off the air it shows a test card with the resume time, color bars, or static - or falls back to the board.
 The control room draws the week as a grid so you can see the schedule at a glance.
+
+A video channel can also take **commercial breaks**: pick a second folder for the spots, say how many minutes of program run between breaks, and how many spots fill each one.
+Each program is cut into even acts of about that length, a break follows every act, the last one included, so a break also separates each program from the next.
+The spots cycle through their folder in order (shuffled daily if the channel is), and the movie picks up where the break cut in.
+The breaks live on the broadcast clock like everything else, so tune in mid-break and you get the spot in progress.
+Set the minutes to 0 for breaks only between programs.
 
 Tuning:
 
@@ -157,7 +164,7 @@ Everything the control room edits lives in `config.json`, and you can hand-edit 
 | `channelName`, `tagline` | Header identity and crawl fallback text | `CABLE 82` |
 | `timeFormat` | `"12h"` or `"24h"` | `12h` |
 | `port` | Server port | `1982` |
-| `channels` | The dial: `{ number, name, type, enabled }` plus per-type fields - video channels add `folder`, `order` (`sequence`/`shuffle-daily`), `mode` (`continuous`/`schedule`), `schedule` windows (`{ days, start, end }`), and `offAir` (`testcard`/`bars`/`snow`/`bulletin`); external channels add `url`. Empty means the board alone as channel 82 | the board on 82 |
+| `channels` | The dial: `{ number, name, type, enabled }` plus per-type fields - video channels add `folder`, `order` (`sequence`/`shuffle-daily`), `mode` (`continuous`/`schedule`), `schedule` windows (`{ days, start, end }`), `offAir` (`testcard`/`bars`/`snow`/`bulletin`), and optionally `breaks` (`{ folder, everyMinutes, spots }`: a second folder of spots cut in every `everyMinutes` minutes of program (0 to 240; 0 means only between programs), `spots` spots per break (1 to 20)); external channels add `url`. Empty means the board alone as channel 82 | the board on 82 |
 | `tuner` | Which tuning inputs are live (`sources.keyboard`, `sources.gamepad`, `sources.http`), whether the dial wraps at the ends (`wrap`), and what covers a channel change (`cut`: `static`/`black`/`none`) | all on, wraps, static |
 | `rotation` | Channel 82's page lineup, in order (`clock`, `messages`, `facts`, `dadjokes`, `weather`, `headlines`) | see file |
 | `pageSeconds` | Seconds per page | `12` |
@@ -425,8 +432,8 @@ The usual suspects are `User=` naming an account that does not exist, `ExecStart
 
 ## Testing
 
-- Server: `node --test test/server.test.mjs` - config validation, feeds, the channels API, the tuner bus (the remote's keys included), and Range serving.
-- Client pure functions: start the server and open `http://localhost:1982/test/harness.html` - the broadcast clock, schedules (overnight windows included), playlist order, the dial, and the volume cycle.
+- Server: `node --test test/server.test.mjs` - config validation (commercial breaks included), feeds, the channels API, the tuner bus (the remote's keys included), and Range serving.
+- Client pure functions: start the server and open `http://localhost:1982/test/harness.html` - the broadcast clock, schedules (overnight windows included), playlist order, the timeline of a channel with breaks cut in, the dial, and the volume cycle.
 - Tuner drill: with more than one channel on the dial, `curl -X POST http://localhost:1982/api/tune -H "content-type: application/json" -d "{\"cmd\":\"up\"}"` and watch the display change channels - the whole bus in one command.
 - Failure drill: `node server.js --chaos` serves mock feeds that randomly hang and fail, so you can watch channel 82 shrug it off.
 - Soak: open `http://localhost:1982/?soak=1` for accelerated channel-82 page flips and refreshes with stats logged to the console.

@@ -203,6 +203,51 @@
       }
 
       const rows = [head, body];
+      if (ch.type === "video") {
+        // Commercial breaks: spots from a second folder, cut into the program
+        // every so many minutes. "(none)" is the plain channel.
+        const b = ch.breaks;
+        const B = S.BREAKS;
+        const numberInput = (key, label, title) => el("input", {
+          type: "number", min: B[key].min, max: B[key].max, step: 1, value: b[key],
+          "aria-label": label, title,
+          onchange: (e) => {
+            b[key] = Math.round(S.clampNum(e.target.value, B[key].min, B[key].max, B[key].dflt));
+            e.target.value = b[key];
+          },
+        });
+        const breaksKnown = !b || channelFolders.some((f) => f.folder === b.folder);
+        const breaksRow = el("div", { class: "ch-body ch-breaks" }, [
+          el("span", { class: "note" }, "Breaks from"),
+          el("select", {
+            "aria-label": "Breaks folder",
+            onchange: (e) => {
+              const folder = e.target.value;
+              if (!folder) delete ch.breaks;
+              else ch.breaks = { folder, everyMinutes: b ? b.everyMinutes : B.everyMinutes.dflt, spots: b ? b.spots : B.spots.dflt };
+              renderChannels();
+            },
+          }, [
+            option("", "(none)", !b),
+            ...(b && !breaksKnown ? [option(b.folder, b.folder + "  (folder missing!)", true)] : []),
+            ...channelFolders.filter((f) => f.folder !== ch.folder).map((f) => option(f.folder, folderLabel(f), !!b && f.folder === b.folder)),
+          ]),
+        ]);
+        if (b) {
+          // Each phrase wraps as a unit, so a narrow screen never splits a
+          // number from its words.
+          breaksRow.appendChild(el("span", { class: "ch-phrase" }, [
+            el("span", { class: "note" }, "every"),
+            numberInput("everyMinutes", "Minutes of program between breaks", "0 = breaks only between programs"),
+            el("span", { class: "note" }, "min of program,"),
+          ]));
+          breaksRow.appendChild(el("span", { class: "ch-phrase" }, [
+            numberInput("spots", "Spots per break", "How many spots run in each break"),
+            el("span", { class: "note" }, "spots per break"),
+          ]));
+        }
+        rows.push(breaksRow);
+      }
       if (ch.type === "video" && ch.mode === "schedule") {
         const windowsHost = el("div", { class: "ch-windows" });
         const windows = ch.schedule || (ch.schedule = []);

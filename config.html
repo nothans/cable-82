@@ -315,6 +315,12 @@
   .ch-item input.ch-name { flex: 1; min-width: 8em; }
   .ch-body { width: 100%; display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; padding-left: 2.4em; }
   .ch-body .note { opacity: 0.75; }
+  /* The body reads as one line ("Breaks from [folder] every [15] min of
+     program, [3] spots per break"), so its controls size to their content
+     and wrap on a narrow screen instead of stacking full-width. */
+  .ch-body select { width: auto; max-width: 100%; }
+  .ch-phrase { display: inline-flex; align-items: center; gap: var(--sp-2); white-space: nowrap; }
+  .ch-breaks input[type="number"] { width: 4em; }
   .ch-windows { width: 100%; padding-left: 2.4em; display: flex; flex-direction: column; gap: var(--sp-1); }
   .ch-window { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
   .ch-window input[type="time"] { width: 8em; }
@@ -439,7 +445,7 @@
 
     <section class="panel">
       <h2>Channels</h2>
-      <p class="hint">The dial, ordered by channel number. The bulletin board is a channel; a video channel plays a folder on the broadcast clock; an external channel frames another page (a retro weather app, say). Tune with arrow keys, a gamepad d-pad, or <code>POST /api/tune</code>.</p>
+      <p class="hint">The dial, ordered by channel number. The bulletin board is a channel; a video channel plays a folder on the broadcast clock, with optional commercial breaks from a second folder; an external channel frames another page (a retro weather app, say). Tune with arrow keys, a gamepad d-pad, or <code>POST /api/tune</code>.</p>
       <div id="channels" class="list"></div>
       <button type="button" id="addChannel" class="small add-row">+ Add channel</button>
       <div id="week-grid-wrap" hidden>
