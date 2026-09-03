@@ -141,7 +141,7 @@
     padding: var(--sp-4) var(--sp-3) 140px;
   }
 
-  /* ---- groups: four steps, station to board ---- */
+  /* ---- groups ---- */
 
   section.group { scroll-margin-top: var(--head-h, 120px); }
   section.group + section.group { margin-top: var(--sp-5); }
@@ -154,11 +154,25 @@
     padding-bottom: var(--sp-1);
     border-bottom: 2px solid var(--line-strong);
   }
+  .group-lede { color: var(--ink-dim); font-size: 14px; margin: calc(-1 * var(--sp-2)) 0 var(--sp-3); }
 
   .release-line { padding: 6px 0; }
   .power-row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; padding: 4px 0; }
   .power-row button.armed { border-color: var(--danger); color: var(--danger); }
 
+  /* ---- vitals: a read-only grid of what the machine is doing ---- */
+  .vitals {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--sp-2) var(--sp-3);
+  }
+  @media (max-width: 560px) { .vitals { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .vital label { display: block; font-size: 12.5px; color: var(--ink-dim); letter-spacing: 0.02em; }
+  .vital .v { font-size: 18px; font-variant-numeric: tabular-nums; line-height: 1.3; }
+  .vital .v.warn { color: var(--warn); }
+  .vital .v.bad { color: #f0938a; }
+  .vital .sub { font-size: 12.5px; color: var(--ink-dim); }
+  .vitals-note { font-size: 12.5px; color: var(--ink-dim); margin-top: var(--sp-2); }
 
   /* ---- panels ---- */
 
@@ -190,7 +204,6 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--sp-2) var(--sp-3);
   }
-  .grid.one { grid-template-columns: minmax(0, 1fr); }
   @media (max-width: 560px) { .grid { grid-template-columns: minmax(0, 1fr); } }
 
   .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -388,16 +401,20 @@
   .ch-item { flex-wrap: wrap; }
   .ch-item .ch-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); width: 100%; }
   .ch-item .ch-head .toggle { flex-shrink: 0; white-space: nowrap; }
-  .ch-item input.ch-number { width: 5.5em; }
-  .ch-item input.ch-name { flex: 1 1 8em; min-width: 6em; }
-  /* The type picker only needs its own width; the name gets the rest. */
+  .ch-item input.ch-number { width: 5.5em; flex: 0 0 auto; }
+  /* The name takes the slack on a wide screen and shrinks to fit a phone;
+     width: auto so the input's own 100% never forces it onto its own line. */
+  .ch-item input.ch-name { flex: 1 1 8em; min-width: 6em; width: auto; }
   .ch-item .ch-head select { width: auto; flex: 0 0 auto; }
+  .ch-item .ch-head .row-actions { margin-left: auto; }
   .ch-body { width: 100%; display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; padding-left: 2.4em; }
+  @media (max-width: 560px) { .ch-body, .ch-windows { padding-left: 0; } }
   .ch-body .note { opacity: 0.75; }
   /* The body reads as one line ("Breaks from [folder] every [15] min of
      program, [3] spots per break"), so its controls size to their content
      and wrap on a narrow screen instead of stacking full-width. */
   .ch-body select { width: auto; max-width: 100%; }
+  .ch-body input.ch-title { width: 12em; }
   .ch-phrase { display: inline-flex; align-items: center; gap: var(--sp-2); white-space: nowrap; }
   .ch-breaks input[type="number"] { width: 4em; }
   .ch-windows { width: 100%; padding-left: 2.4em; display: flex; flex-direction: column; gap: var(--sp-1); }
@@ -437,118 +454,60 @@
       </div>
     </div>
     <nav class="groupnav" aria-label="Control room sections">
-      <a href="#server">Server</a>
-      <a href="#display">Display</a>
+      <a href="#quick">Quick settings</a>
       <a href="#channels">Channels</a>
-      <a href="#preview">Channel Preview</a>
       <a href="#board">Community Board</a>
+      <a href="#preview">Channel Preview</a>
+      <a href="#display">Display</a>
+      <a href="#server">Server</a>
     </nav>
   </header>
 
   <main id="app" aria-busy="true">
 
-    <section class="group" id="server" aria-labelledby="g-server">
-      <h2 class="group-head" id="g-server">Server</h2>
-      <section class="panel" id="p-network">
-        <h3>Network</h3>
-        <p class="hint">The display, this control room, and the remote all live on this port.</p>
+    <section class="group" id="quick" aria-labelledby="g-quick">
+      <h2 class="group-head" id="g-quick">Quick settings</h2>
+      <p class="group-lede">The things a station touches week to week: who it is, what the board is saying, and the music behind it. Everything else has its own group below.</p>
+      <section class="panel" id="p-identity">
+        <h3>Identity</h3>
+        <p class="hint">The name and tagline across the top of the board. The name is the station's everywhere it appears; the crawl falls back to both when no feed has anything to say.</p>
         <div class="grid">
           <div class="field">
-            <label for="f-port">Server port</label>
-            <input type="number" id="f-port" min="1" max="65535" step="1">
-            <span class="note">Takes effect the next time the server restarts.</span>
+            <label for="f-channelName">Station name</label>
+            <input type="text" id="f-channelName" maxlength="40" placeholder="CABLE 82">
+          </div>
+          <div class="field">
+            <label for="f-tagline">Tagline</label>
+            <input type="text" id="f-tagline" maxlength="60" placeholder="COMMUNITY BULLETIN BOARD">
           </div>
         </div>
       </section>
-      <section class="panel" id="p-power" hidden>
-        <h3>Power</h3>
-        <p class="hint">Restart or switch off the machine the station runs on. Both stop the station and flush the disks first, which is what keeps a memory card from being corrupted.</p>
+      <section class="panel" id="p-messages">
+        <h3>Community messages</h3>
+        <p class="hint">Your bulletin board: birthdays, bake sales, lost dogs. Leave the color on Auto to let them cycle.</p>
+        <div id="messages" class="list"></div>
+        <button type="button" id="addMessage" class="small add-row">+ Add message</button>
+      </section>
+      <section class="panel" id="p-music">
+        <h3>Music</h3>
+        <p class="hint">Continuous background music behind the Community Board, played from the <code>music/</code> folder - drop audio files there and they join the rotation. On a Pi kiosk, launch Chromium with <code>--autoplay-policy=no-user-gesture-required</code> so it plays from boot; on a desktop it starts on your first click.</p>
         <div class="grid">
           <div class="field">
-            <label>Restart</label>
-            <div class="power-row">
-              <button type="button" id="restartHost" class="ghost small">Restart&#8230;</button>
-              <span class="note" id="restartNote">Back on the air in about a minute.</span>
+            <label>Playback</label>
+            <div class="toggle"><input type="checkbox" id="f-musicEnabled"><label for="f-musicEnabled">Play background music</label></div>
+            <div class="toggle"><input type="checkbox" id="f-musicShuffle"><label for="f-musicShuffle">Shuffle the tracks</label></div>
+          </div>
+          <div class="field">
+            <label for="f-musicVolume">Volume</label>
+            <div class="range-row">
+              <input type="range" id="f-musicVolume" min="0" max="100" step="1">
+              <output id="musicVolumeOut">60%</output>
             </div>
           </div>
-          <div class="field">
-            <label>Shut down</label>
-            <div class="power-row">
-              <button type="button" id="shutdownHost" class="ghost small">Shut down&#8230;</button>
-              <span class="note" id="shutdownNote">Wait for the green light to stop blinking, then pull the power.</span>
-            </div>
-          </div>
         </div>
-      </section>
-      <section class="panel" id="p-release">
-        <h3>Release</h3>
-        <p class="hint">What this install is running.</p>
-        <div class="grid">
-          <div class="field">
-            <label>Version</label>
-            <div id="releaseVersion" class="release-line mono">&hellip;</div>
-            <span class="note" id="releaseNote"></span>
-          </div>
-          <div class="field">
-            <label>Source</label>
-            <div class="release-line"><a id="releaseRepo" href="https://github.com/nothans/cable-82" target="_blank" rel="noopener">github.com/nothans/cable-82</a></div>
-            <span class="note">Update with <code>git pull</code> and a restart; the display reloads itself.</span>
-          </div>
-        </div>
-      </section>
-    </section>
-
-    <section class="group" id="display" aria-labelledby="g-display">
-      <h2 class="group-head" id="g-display">Display</h2>
-      <section class="panel" id="p-picture">
-        <h3>Picture</h3>
-        <p class="hint">For a real tube fed over composite or an RF modulator. Leave it off on a flat panel.</p>
-        <div class="grid">
-          <div class="field">
-            <label>Tube</label>
-            <div class="toggle"><input type="checkbox" id="f-crtMode"><label for="f-crtMode">CRT mode: softer colors, no drop shadow</label></div>
-            <span class="note">Calms the saturated reds and blues that composite and RF smear.</span>
-            <div class="toggle"><input type="checkbox" id="f-crtInkText"><label for="f-crtInkText">Dark text on color pages</label></div>
-            <span class="note">For tubes that smear white text. Only applies while CRT mode is on.</span>
-          </div>
-          <div class="field">
-            <label for="f-textScale">Text size</label>
-            <input type="number" id="f-textScale" min="1" max="1.5" step="0.05">
-            <span class="note">1 is the original layout. Try 1.25 on a small tube.</span>
-          </div>
-          <div class="field">
-            <label for="f-overscanX">Overscan margin, sides (%)</label>
-            <input type="number" id="f-overscanX" min="0" max="15" step="1">
-            <span class="note">Raise it if your TV crops the left or right edge.</span>
-          </div>
-          <div class="field">
-            <label for="f-overscanY">Overscan margin, top and bottom (%)</label>
-            <input type="number" id="f-overscanY" min="0" max="15" step="1">
-            <span class="note">Raise it if your TV crops the top or bottom edge.</span>
-          </div>
-        </div>
-      </section>
-      <section class="panel" id="p-clock">
-        <h3>Clock</h3>
-        <p class="hint">How the set writes the time, everywhere it shows one.</p>
-        <div class="grid">
-          <div class="field">
-            <label for="f-timeFormat">Clock format</label>
-            <select id="f-timeFormat">
-              <option value="12h">12-hour (8:04 PM)</option>
-              <option value="24h">24-hour (20:04)</option>
-            </select>
-          </div>
-        </div>
-      </section>
-      <section class="panel" id="p-kiosk">
-        <h3>Kiosk</h3>
-        <p class="hint">The hour the display reloads itself. Pick a quiet one.</p>
-        <div class="grid">
-          <div class="field">
-            <label for="f-dailyReloadHour">Daily reload hour</label>
-            <select id="f-dailyReloadHour"></select>
-          </div>
+        <div class="field" style="margin-top: var(--sp-2);">
+          <label>Tracks in the folder <span id="trackCount" class="count"></span></label>
+          <div id="trackList" class="track-list"></div>
         </div>
       </section>
     </section>
@@ -598,72 +557,9 @@
       </section>
     </section>
 
-    <section class="group" id="preview" aria-labelledby="g-preview">
-      <h2 class="group-head" id="g-preview">Channel Preview</h2>
-      <section class="panel" id="p-preview-identity">
-        <h3>Identity</h3>
-        <p class="hint">The name and tagline across the top of the guide.</p>
-        <div class="grid">
-          <div class="field">
-            <label for="f-previewName">Channel name</label>
-            <input type="text" id="f-previewName" maxlength="40" placeholder="CABLEVUE">
-            <span class="note">Also names channel 0 on the dial.</span>
-          </div>
-          <div class="field">
-            <label for="f-previewTagline">Tagline</label>
-            <input type="text" id="f-previewTagline" maxlength="60" placeholder="WHAT'S ON, AND WHAT'S NEXT">
-          </div>
-        </div>
-      </section>
-      <section class="panel" id="p-preview-grid">
-        <h3>The grid</h3>
-        <p class="hint">Every channel on the dial is listed.</p>
-        <div class="grid">
-          <div class="field">
-            <label for="f-previewSlots">Half hours across</label>
-            <input type="number" id="f-previewSlots" min="2" max="4" step="1">
-            <span class="note">How far ahead the grid looks: three columns is an hour and a half.</span>
-          </div>
-          <div class="field">
-            <label for="f-previewScroll">Seconds per screenful</label>
-            <input type="number" id="f-previewScroll" min="4" max="120" step="1">
-            <span class="note">How long the lineup takes to crawl one screen. It only crawls when it is taller than the screen.</span>
-          </div>
-          <div class="field">
-            <label>Clock</label>
-            <div class="toggle"><input type="checkbox" id="f-previewSeconds"><label for="f-previewSeconds">Count seconds</label></div>
-            <span class="note">The AM/PM vs 24-hour choice follows the Clock panel under Display.</span>
-          </div>
-        </div>
-      </section>
-      <section class="panel" id="p-preview-colors">
-        <h3>Colors</h3>
-        <p class="hint">The background the grid is drawn on.</p>
-        <div class="grid">
-          <div class="field">
-            <label for="f-previewBg">Background</label>
-            <select id="f-previewBg"></select>
-          </div>
-        </div>
-      </section>
-    </section>
-
     <section class="group" id="board" aria-labelledby="g-board">
       <h2 class="group-head" id="g-board">Community Board</h2>
-      <section class="panel" id="p-identity">
-        <h3>Identity</h3>
-        <p class="hint">The name and tagline across the top of the board.</p>
-        <div class="grid">
-          <div class="field">
-            <label for="f-channelName">Channel name</label>
-            <input type="text" id="f-channelName" maxlength="40" placeholder="CABLE 82">
-          </div>
-          <div class="field">
-            <label for="f-tagline">Tagline</label>
-            <input type="text" id="f-tagline" maxlength="60" placeholder="COMMUNITY BULLETIN BOARD">
-          </div>
-        </div>
-      </section>
+      <p class="group-lede">Everything on channel 82 beyond its name and messages: the page lineup, the colors, the decks of facts and jokes, the weather, the feeds, the crawl, CheerLights.</p>
       <section class="panel" id="p-rotation">
         <h3>Page rotation</h3>
         <p class="hint">The board's lineup, in order, and how long each page holds. Each visit to a headlines slot shows the next item from that feed.</p>
@@ -676,11 +572,23 @@
           </div>
         </div>
       </section>
-      <section class="panel" id="p-messages">
-        <h3>Community messages</h3>
-        <p class="hint">Your bulletin board: birthdays, bake sales, lost dogs. Leave the color on Auto to let them cycle.</p>
-        <div id="messages" class="list"></div>
-        <button type="button" id="addMessage" class="small add-row">+ Add message</button>
+      <section class="panel" id="p-colors">
+        <h3>Colors</h3>
+        <p class="hint">Pages with no fixed color cycle through the palette you pick.</p>
+        <div class="field">
+          <label>Page cycle</label>
+          <div id="pageCycle" class="chips"></div>
+        </div>
+        <div class="grid" style="margin-top: var(--sp-2);">
+          <div class="field">
+            <label for="f-headerBg">Header background</label>
+            <select id="f-headerBg"></select>
+          </div>
+          <div class="field">
+            <label for="f-crawlBg">Crawl background</label>
+            <select id="f-crawlBg"></select>
+          </div>
+        </div>
       </section>
       <section class="panel" id="p-facts">
         <h3>Facts &amp; jokes</h3>
@@ -784,43 +692,165 @@
           </div>
         </div>
       </section>
-      <section class="panel" id="p-music">
-        <h3>Music</h3>
-        <p class="hint">Continuous background music behind the Community Board, played from the <code>music/</code> folder - drop audio files there and they join the rotation. On a Pi kiosk, launch Chromium with <code>--autoplay-policy=no-user-gesture-required</code> so it plays from boot; on a desktop it starts on your first click.</p>
+    </section>
+
+    <section class="group" id="preview" aria-labelledby="g-preview">
+      <h2 class="group-head" id="g-preview">Channel Preview</h2>
+      <section class="panel" id="p-preview-identity">
+        <h3>Identity</h3>
+        <p class="hint">The name and tagline across the top of the guide.</p>
         <div class="grid">
           <div class="field">
-            <label>Playback</label>
-            <div class="toggle"><input type="checkbox" id="f-musicEnabled"><label for="f-musicEnabled">Play background music</label></div>
-            <div class="toggle"><input type="checkbox" id="f-musicShuffle"><label for="f-musicShuffle">Shuffle the tracks</label></div>
+            <label for="f-previewName">Channel name</label>
+            <input type="text" id="f-previewName" maxlength="40" placeholder="CABLEVUE">
+            <span class="note">Also names channel 0 on the dial.</span>
           </div>
           <div class="field">
-            <label for="f-musicVolume">Volume</label>
-            <div class="range-row">
-              <input type="range" id="f-musicVolume" min="0" max="100" step="1">
-              <output id="musicVolumeOut">60%</output>
+            <label for="f-previewTagline">Tagline</label>
+            <input type="text" id="f-previewTagline" maxlength="60" placeholder="WHAT'S ON, AND WHAT'S NEXT">
+          </div>
+        </div>
+      </section>
+      <section class="panel" id="p-preview-grid">
+        <h3>The grid</h3>
+        <p class="hint">Every channel on the dial is listed. What a video channel's programs are called is set on the channel itself, in the dial.</p>
+        <div class="grid">
+          <div class="field">
+            <label for="f-previewSlots">Half hours across</label>
+            <input type="number" id="f-previewSlots" min="2" max="4" step="1">
+            <span class="note">How far ahead the grid looks: three columns is an hour and a half.</span>
+          </div>
+          <div class="field">
+            <label for="f-previewScroll">Seconds per screenful</label>
+            <input type="number" id="f-previewScroll" min="4" max="120" step="1">
+            <span class="note">How long the lineup takes to crawl one screen. It only crawls when it is taller than the screen.</span>
+          </div>
+          <div class="field">
+            <label>Clock</label>
+            <div class="toggle"><input type="checkbox" id="f-previewSeconds"><label for="f-previewSeconds">Count seconds</label></div>
+            <span class="note">The AM/PM vs 24-hour choice follows the Clock panel under Display.</span>
+          </div>
+        </div>
+      </section>
+      <section class="panel" id="p-preview-colors">
+        <h3>Colors</h3>
+        <p class="hint">The background the grid is drawn on.</p>
+        <div class="grid">
+          <div class="field">
+            <label for="f-previewBg">Background</label>
+            <select id="f-previewBg"></select>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section class="group" id="display" aria-labelledby="g-display">
+      <h2 class="group-head" id="g-display">Display</h2>
+      <section class="panel" id="p-picture">
+        <h3>Picture</h3>
+        <p class="hint">For a real tube fed over composite or an RF modulator. Leave it off on a flat panel.</p>
+        <div class="grid">
+          <div class="field">
+            <label>Tube</label>
+            <div class="toggle"><input type="checkbox" id="f-crtMode"><label for="f-crtMode">CRT mode: softer colors, no drop shadow</label></div>
+            <span class="note">Calms the saturated reds and blues that composite and RF smear.</span>
+            <div class="toggle"><input type="checkbox" id="f-crtInkText"><label for="f-crtInkText">Dark text on color pages</label></div>
+            <span class="note">For tubes that smear white text. Only applies while CRT mode is on.</span>
+          </div>
+          <div class="field">
+            <label for="f-textScale">Text size</label>
+            <input type="number" id="f-textScale" min="1" max="1.5" step="0.05">
+            <span class="note">1 is the original layout. Try 1.25 on a small tube.</span>
+          </div>
+          <div class="field">
+            <label for="f-overscanX">Overscan margin, sides (%)</label>
+            <input type="number" id="f-overscanX" min="0" max="15" step="1">
+            <span class="note">Raise it if your TV crops the left or right edge.</span>
+          </div>
+          <div class="field">
+            <label for="f-overscanY">Overscan margin, top and bottom (%)</label>
+            <input type="number" id="f-overscanY" min="0" max="15" step="1">
+            <span class="note">Raise it if your TV crops the top or bottom edge.</span>
+          </div>
+        </div>
+      </section>
+      <section class="panel" id="p-clock">
+        <h3>Clock</h3>
+        <p class="hint">How the set writes the time, everywhere it shows one.</p>
+        <div class="grid">
+          <div class="field">
+            <label for="f-timeFormat">Clock format</label>
+            <select id="f-timeFormat">
+              <option value="12h">12-hour (8:04 PM)</option>
+              <option value="24h">24-hour (20:04)</option>
+            </select>
+          </div>
+        </div>
+      </section>
+      <section class="panel" id="p-kiosk">
+        <h3>Kiosk</h3>
+        <p class="hint">The hour the display reloads itself. Pick a quiet one.</p>
+        <div class="grid">
+          <div class="field">
+            <label for="f-dailyReloadHour">Daily reload hour</label>
+            <select id="f-dailyReloadHour"></select>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section class="group" id="server" aria-labelledby="g-server">
+      <h2 class="group-head" id="g-server">Server</h2>
+      <section class="panel" id="p-vitals">
+        <h3>Vitals</h3>
+        <p class="hint">How the machine the station runs on is doing, read every ten seconds while this page is open. The same numbers are at <code>GET /api/vitals</code>.</p>
+        <div class="vitals" id="vitals"></div>
+        <p class="vitals-note" id="vitalsNote"></p>
+      </section>
+      <section class="panel" id="p-network">
+        <h3>Network</h3>
+        <p class="hint">The display, this control room, and the remote all live on this port.</p>
+        <div class="grid">
+          <div class="field">
+            <label for="f-port">Server port</label>
+            <input type="number" id="f-port" min="1" max="65535" step="1">
+            <span class="note">Takes effect the next time the server restarts.</span>
+          </div>
+        </div>
+      </section>
+      <section class="panel" id="p-power" hidden>
+        <h3>Power</h3>
+        <p class="hint">Restart or switch off the machine the station runs on. Both stop the station and flush the disks first, which is what keeps a memory card from being corrupted.</p>
+        <div class="grid">
+          <div class="field">
+            <label>Restart</label>
+            <div class="power-row">
+              <button type="button" id="restartHost" class="ghost small">Restart&#8230;</button>
+              <span class="note" id="restartNote">Back on the air in about a minute.</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>Shut down</label>
+            <div class="power-row">
+              <button type="button" id="shutdownHost" class="ghost small">Shut down&#8230;</button>
+              <span class="note" id="shutdownNote">Wait for the green light to stop blinking, then pull the power.</span>
             </div>
           </div>
         </div>
-        <div class="field" style="margin-top: var(--sp-2);">
-          <label>Tracks in the folder <span id="trackCount" class="count"></span></label>
-          <div id="trackList" class="track-list"></div>
-        </div>
       </section>
-      <section class="panel" id="p-colors">
-        <h3>Colors</h3>
-        <p class="hint">Pages with no fixed color cycle through the palette you pick.</p>
-        <div class="field">
-          <label>Page cycle</label>
-          <div id="pageCycle" class="chips"></div>
-        </div>
-        <div class="grid" style="margin-top: var(--sp-2);">
+      <section class="panel" id="p-release">
+        <h3>Release</h3>
+        <p class="hint">What this install is running.</p>
+        <div class="grid">
           <div class="field">
-            <label for="f-headerBg">Header background</label>
-            <select id="f-headerBg"></select>
+            <label>Version</label>
+            <div id="releaseVersion" class="release-line mono">&hellip;</div>
+            <span class="note" id="releaseNote"></span>
           </div>
           <div class="field">
-            <label for="f-crawlBg">Crawl background</label>
-            <select id="f-crawlBg"></select>
+            <label>Source</label>
+            <div class="release-line"><a id="releaseRepo" href="https://github.com/nothans/cable-82" target="_blank" rel="noopener">github.com/nothans/cable-82</a></div>
+            <span class="note">Update with <code>git pull</code> and a restart; the display reloads itself.</span>
           </div>
         </div>
       </section>

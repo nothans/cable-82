@@ -38,6 +38,7 @@ const crypto = require("node:crypto");
 const { pipeline } = require("node:stream");
 const { execFileSync } = require("node:child_process");
 const SCHEMA = require("./config-schema.js");
+const { readMp4Title } = require("./media-meta.js");
 
 const ROOT = __dirname;
 
@@ -172,13 +173,44 @@ function send(res, code, text) {
   res.end(text || String(code));
 }
 
+// Where a JSON parse failed, as a line and column: what a person with the
+// file open in an editor needs. V8 words its errors three ways: with a
+// position ("... at position 812"), with a snippet of the text around the
+// fault ('Unexpected token ',', ..."tagline": ,\n}" is not valid JSON'), or
+// with neither ("Unexpected end of JSON input"). The first two can be turned
+// into a line and column; the third is already the whole story.
+function describeJsonError(text, e) {
+  const lineCol = (pos) => {
+    const before = text.slice(0, pos);
+    return "line " + before.split("\n").length + ", column " + (pos - before.lastIndexOf("\n"));
+  };
+  const msg = e.message;
+  const byPosition = /position (\d+)/.exec(msg);
+  if (byPosition) return msg.replace(/ in JSON at position \d+.*$/, "") + " at " + lineCol(Number(byPosition[1]));
+  const bySnippet = /^Unexpected token (.+?), (\.\.\.)?"([\s\S]*)"(\.\.\.)? is not valid JSON$/.exec(msg);
+  if (bySnippet) {
+    const token = bySnippet[1].replace(/^'|'$/g, "");
+    const snippet = bySnippet[3].replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+    const at = text.indexOf(snippet);
+    if (at >= 0) {
+      // the token V8 tripped on is the last one in the snippet's leading half
+      const inSnippet = snippet.indexOf(token, Math.max(0, Math.min(snippet.length - 1, 10) - token.length));
+      const pos = at + (inSnippet >= 0 ? inSnippet : 0);
+      return "unexpected " + JSON.stringify(token) + " at " + lineCol(pos);
+    }
+  }
+  return msg;
+}
+
 // Re-read config.json when its mtime changes; keep the last good config if
 // the new file is broken so the channel stays on the air. The parsed config
 // is run through the shared schema, so the display and the server always
-// agree on what the config means.
+// agree on what the config means. A broken file is remembered as an error
+// (`loadConfig.error`) so the display and the control room can say so,
+// rather than the log being the only place that knows.
 function makeConfigLoader(configPath) {
   let cache = { key: "", cfg: null };
-  return function loadConfig() {
+  function loadConfig() {
     let key;
     try {
       const st = fs.statSync(configPath);
@@ -187,18 +219,24 @@ function makeConfigLoader(configPath) {
       return cache.cfg;
     }
     if (key !== cache.key) {
+      const text = fs.readFileSync(configPath, "utf8");
       try {
-        const raw = JSON.parse(fs.readFileSync(configPath, "utf8"));
-        const { ok, cfg } = SCHEMA.validateConfig(raw);
-        if (!ok) throw new Error("config failed validation");
+        const raw = JSON.parse(text);
+        const { ok, cfg, errors } = SCHEMA.validateConfig(raw);
+        if (!ok) throw new Error(errors.join("; "));
         cache = { key, cfg };
+        loadConfig.error = null;
       } catch (e) {
-        console.error("[cable-82] config.json error: " + e.message + " (keeping last good config)");
+        const detail = e instanceof SyntaxError ? describeJsonError(text, e) : e.message;
+        loadConfig.error = { message: "config.json could not be read: " + detail, since: new Date().toISOString() };
+        console.error("[cable-82] " + loadConfig.error.message + (cache.cfg ? " (keeping the last good config on the air)" : ""));
         cache.key = key; // do not retry until the file changes again
       }
     }
     return cache.cfg;
-  };
+  }
+  loadConfig.error = null;
+  return loadConfig;
 }
 
 // Read the request body with a hard size cap, so a giant POST can't exhaust
@@ -394,9 +432,20 @@ function createApp(opts = {}) {
   function handleConfig(req, res) {
     if (req.method === "GET") {
       const cfg = loadConfig();
-      if (!cfg) return send(res, 500, "CONFIG UNAVAILABLE");
+      const problem = rawLoadConfig.error;
+      if (!cfg) {
+        // Nothing good to serve. Say why in a shape the display and the
+        // control room can show, so a broken hand edit is not mistaken for
+        // a server that is down.
+        res.writeHead(500, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+        return res.end(JSON.stringify({ ok: false, error: problem ? problem.message : "config.json could not be read", since: problem && problem.since }));
+      }
       res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-      return res.end(JSON.stringify({ version: String(configVersion()), config: cfg }));
+      const out = { version: String(configVersion()), config: cfg };
+      // The file on disk is broken but the last good settings are on the
+      // air: the room shows this and a Save writes a good file over it.
+      if (problem) out.warning = problem.message + ". The last good settings are on the air; Save from here to write a good file over it.";
+      return res.end(JSON.stringify(out));
     }
     if (req.method === "POST") {
       // A custom header a same-origin fetch must set; browsers won't attach
@@ -649,9 +698,39 @@ function createApp(opts = {}) {
     return typeof name === "string" && SCHEMA.FOLDER_RE.test(name) && !name.includes("..");
   }
 
+  // The titles written inside a folder's files, read once each and kept
+  // beside the videos as .titles.json (null for a file with none). Only a
+  // channel set to show titles from its files asks; a folder of two hundred
+  // files is walked once, header by header, and never again.
+  function readTitles(dir, names) {
+    const cachePath = path.join(dir, ".titles.json");
+    let cache = {};
+    try {
+      const raw = JSON.parse(fs.readFileSync(cachePath, "utf8"));
+      if (raw && typeof raw === "object") cache = raw;
+    } catch (e) {
+      /* no cache yet */
+    }
+    let learned = 0;
+    for (const f of names) {
+      if (f in cache) continue;
+      cache[f] = /\.(mp4|m4v|mov)$/i.test(f) ? readMp4Title(path.join(dir, f)) : null;
+      learned++;
+    }
+    if (learned) {
+      try {
+        fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2) + "\n");
+      } catch (e) {
+        /* a read-only drive: the titles are still served, just re-read next time */
+      }
+    }
+    return cache;
+  }
+
   // The playlist of one folder that has already been resolved to a
-  // directory: the files in airing order, each with its cached duration.
-  function listFiles(folder, dir) {
+  // directory: the files in airing order, each with its cached duration,
+  // and the title inside it when the channel wants those.
+  function listFiles(folder, dir, withTitles) {
     const durations = readDurations(dir);
     let names = [];
     try {
@@ -659,17 +738,22 @@ function createApp(opts = {}) {
     } catch (e) {
       return null;
     }
-    return names.map((f) => ({
-      file: f,
-      url: "channels/" + encodeURIComponent(folder) + "/" + encodeURIComponent(f),
-      duration: Number.isFinite(durations[f]) ? durations[f] : null,
-    }));
+    const titles = withTitles ? readTitles(dir, names) : null;
+    return names.map((f) => {
+      const entry = {
+        file: f,
+        url: "channels/" + encodeURIComponent(folder) + "/" + encodeURIComponent(f),
+        duration: Number.isFinite(durations[f]) ? durations[f] : null,
+      };
+      if (titles) entry.title = typeof titles[f] === "string" ? titles[f] : null;
+      return entry;
+    });
   }
 
   // The same for a folder named in the config, wherever it lives.
-  function listChannelFiles(folder) {
+  function listChannelFiles(folder, withTitles) {
     const found = resolveFolder(folder);
-    return found ? listFiles(folder, found.dir) : null; // null: missing on every root
+    return found ? listFiles(folder, found.dir, withTitles) : null; // null: missing on every root
   }
 
   // GET /api/channels: every folder under channels/ (for the control room's
@@ -710,7 +794,7 @@ function createApp(opts = {}) {
     const channels = [];
     for (const ch of (cfg && cfg.channels) || []) {
       if (ch.type !== "video") continue;
-      const entry = { number: ch.number, folder: ch.folder, files: listChannelFiles(ch.folder) || [] };
+      const entry = { number: ch.number, folder: ch.folder, files: listChannelFiles(ch.folder, ch.titles === "metadata") || [] };
       // A programmed channel carries its spots too: one fetch gives the
       // display everything the composite timeline is built from.
       if (ch.breaks) entry.breaks = { folder: ch.breaks.folder, files: listChannelFiles(ch.breaks.folder) || [] };
@@ -933,6 +1017,111 @@ function createApp(opts = {}) {
       .catch(() => send(res, 400, "BAD REQUEST"));
   }
 
+  // ---------------- vitals: how the machine is doing
+  // What a person checking on a Pi in a closet wants to know without a
+  // shell: how long it has been up, how warm it is, whether it is starving
+  // for power, memory, or disk. Read from /proc, /sys, and the OS; nothing
+  // that needs a package. Fields a machine cannot answer are null.
+
+  function readMeminfo() {
+    try {
+      const text = fs.readFileSync("/proc/meminfo", "utf8");
+      const kb = (key) => {
+        const m = new RegExp("^" + key + ":\\s+(\\d+)", "m").exec(text);
+        return m ? Number(m[1]) * 1024 : null;
+      };
+      return { available: kb("MemAvailable"), swapTotal: kb("SwapTotal"), swapFree: kb("SwapFree") };
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function cpuTemperature() {
+    for (const f of ["/sys/class/thermal/thermal_zone0/temp", "/sys/class/hwmon/hwmon0/temp1_input"]) {
+      try {
+        const v = Number(fs.readFileSync(f, "utf8").trim());
+        if (Number.isFinite(v)) return Math.round((v > 1000 ? v / 1000 : v) * 10) / 10;
+      } catch (e) {
+        /* next */
+      }
+    }
+    return null;
+  }
+
+  // vcgencmd get_throttled, decoded. The low bits say what is happening
+  // now; bits 16 up say what has happened since boot. Asked at most every
+  // ten seconds: it spawns a process.
+  let throttledCache = { at: 0, value: null };
+  function throttledFlags() {
+    if (!IS_PI) return null;
+    if (Date.now() - throttledCache.at < 10000) return throttledCache.value;
+    let value = null;
+    try {
+      const out = execFileSync("vcgencmd", ["get_throttled"], { encoding: "utf8", timeout: 2000, stdio: ["ignore", "pipe", "ignore"] });
+      const m = /0x([0-9a-f]+)/i.exec(out);
+      if (m) {
+        const bits = parseInt(m[1], 16);
+        value = {
+          raw: "0x" + bits.toString(16),
+          underVoltageNow: !!(bits & 0x1),
+          frequencyCappedNow: !!(bits & 0x2),
+          throttledNow: !!(bits & 0x4),
+          softTempLimitNow: !!(bits & 0x8),
+          underVoltageSinceBoot: !!(bits & 0x10000),
+          frequencyCappedSinceBoot: !!(bits & 0x20000),
+          throttledSinceBoot: !!(bits & 0x40000),
+          softTempLimitSinceBoot: !!(bits & 0x80000),
+        };
+      }
+    } catch (e) {
+      /* no vcgencmd here */
+    }
+    throttledCache = { at: Date.now(), value };
+    return value;
+  }
+
+  function diskSpace(dir) {
+    if (typeof fs.statfsSync !== "function") return null; // Node before 18.15
+    try {
+      const s = fs.statfsSync(dir);
+      return { totalBytes: s.bsize * s.blocks, freeBytes: s.bsize * s.bavail };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function handleVitals(res) {
+    const mem = readMeminfo();
+    const total = os.totalmem();
+    const free = mem.available != null ? mem.available : os.freemem();
+    const disks = [];
+    const seen = new Set();
+    const addDisk = (dir, label) => {
+      const space = diskSpace(dir);
+      if (!space) return;
+      const key = space.totalBytes + ":" + space.freeBytes;
+      if (seen.has(key)) return; // the same volume under two paths
+      seen.add(key);
+      disks.push({ label, path: dir, totalBytes: space.totalBytes, freeBytes: space.freeBytes });
+    };
+    addDisk(ROOT, "the card");
+    for (const root of channelRoots()) if (root.volume) addDisk(root.dir, root.volume);
+    const out = {
+      host: { name: os.hostname(), model: HOST_MODEL, pi: IS_PI, platform: process.platform, arch: process.arch, node: process.versions.node },
+      uptimeSec: Math.round(os.uptime()),
+      station: { uptimeSec: Math.round(process.uptime()), version: VERSION, build: DISPLAY_BUILD, pid: process.pid },
+      load: os.loadavg().map((n) => Math.round(n * 100) / 100),
+      cpu: { count: os.cpus().length, temperatureC: cpuTemperature(), throttled: throttledFlags() },
+      memory: { totalBytes: total, freeBytes: free, usedPercent: Math.round(((total - free) / total) * 100) },
+      swap: mem.swapTotal != null ? { totalBytes: mem.swapTotal, freeBytes: mem.swapFree } : null,
+      disks,
+      listeners: sseClients.size,
+      at: new Date().toISOString(),
+    };
+    res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+    res.end(JSON.stringify(out));
+  }
+
   function serveStatic(pathname, res, rangeHeader) {
     let p = pathname === "/" ? "/index.html" : pathname;
     if (p === "/config") p = "/config.html"; // friendly control-room URL
@@ -1005,6 +1194,10 @@ function createApp(opts = {}) {
       }
       if (pathname === "/api/system") {
         handleSystem(req, res);
+        return;
+      }
+      if (pathname === "/api/vitals") {
+        handleVitals(res);
         return;
       }
       if (pathname === "/api/version") {

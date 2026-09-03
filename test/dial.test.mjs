@@ -124,6 +124,38 @@ test("the guide reads the same clock as the player and merges a long program acr
   assert.equal(g.rows[1].cells.reduce((n, c) => n + c.span, 0), 3, "every slot is covered");
 });
 
+test("the guide never lists a commercial: a break at the slot names the program it sits inside", () => {
+  const ch = { number: 2, type: "video", enabled: true, mode: "continuous", order: "sequence", folder: "movies", breaks: { folder: "spots", everyMinutes: 30, spots: 1 } };
+  const films = [film("Long Movie.mp4", 3600), film("Short.mp4", 1800)];
+  const spots = [spot("Buy Soap.mp4", 30)];
+  const at = new Date(2026, 8, 3, 12, 0, 0);
+  const tl = D.channelTimeline(ch, films, spots, at);
+  assert.deepEqual(tl.map((s) => s.kind), ["program", "spot", "program", "spot", "program", "spot"]);
+  // find a moment the clock lands inside the first spot and ask the guide about it
+  let total = 0;
+  const starts = tl.map((s) => { const t = total; total += s.duration; return t; });
+  const inSpot = D.EPOCH + (starts[1] + 10) * 1000;
+  const p = D.programAt(ch, { files: films, spots }, new Date(inSpot), D.EPOCH);
+  assert.equal(p.title, "LONG MOVIE");
+  assert.equal(p.kind, "program");
+  // and a moment inside the second act names the same film
+  const inAct2 = D.EPOCH + (starts[2] + 10) * 1000;
+  assert.equal(D.programAt(ch, { files: films, spots }, new Date(inAct2), D.EPOCH).title, "LONG MOVIE");
+  // the break after Long Movie's last act, before Short, still belongs to Long Movie
+  const inLastBreak = D.EPOCH + (starts[3] + 5) * 1000;
+  assert.equal(D.programAt(ch, { files: films, spots }, new Date(inLastBreak), D.EPOCH).title, "LONG MOVIE");
+});
+
+test("segmentName follows the channel's titles setting", () => {
+  const seg = { file: "BBDVD0102.mp4", title: "Give Blood" };
+  assert.equal(D.segmentName({ titles: "filename" }, seg), "BBDVD0102");
+  assert.equal(D.segmentName({ titles: "metadata" }, seg), "GIVE BLOOD");
+  assert.equal(D.segmentName({ titles: "metadata" }, { file: "02 Design for Dreaming.mp4", title: null }), "DESIGN FOR DREAMING", "no title inside: the file name");
+  assert.equal(D.segmentName({ titles: "fixed", title: "COMMERCIALS" }, seg), "COMMERCIALS");
+  assert.equal(D.segmentName({ titles: "fixed", name: "LATE NIGHT" }, seg), "LATE NIGHT");
+  assert.equal(D.segmentName({}, seg), "BBDVD0102", "no setting: the file name, as before");
+});
+
 test("the clock face writes 12h, 24h, and seconds when asked", () => {
   const d = new Date(2026, 8, 2, 20, 4, 7);
   assert.equal(D.formatClock(d, "12h"), "8:04 PM");

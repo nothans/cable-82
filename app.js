@@ -45,14 +45,15 @@
 
   // Load the runtime config: the server's config.json via /api/config, with
   // the bundled defaults as the offline fallback (static hosting, a server
-  // that is down). A display with no server has no bus and never reloads.
+  // that is down). A server that answers but cannot read its config.json
+  // says so, and that is not a case for the defaults: the person who broke
+  // the file needs to be told, not shown a factory board.
   async function loadRuntimeConfig() {
     try {
       const r = await fetch("api/config", { cache: "no-store" });
-      if (r.ok) {
-        const j = await r.json();
-        return { raw: j.config, version: j.version };
-      }
+      const j = await r.json().catch(() => null);
+      if (r.ok && j && j.config) return { raw: j.config, version: j.version };
+      if (j && j.error) return { error: j.error };
     } catch (e) {
       /* endpoint unreachable: fall through */
     }
@@ -117,11 +118,14 @@
     const soak = new URLSearchParams(location.search).has("soak");
     if (soak) console.log("[cable-82] soak mode on");
 
-    loadRuntimeConfig().then(({ raw, version }) => {
-      const result = S.validateConfig(raw);
+    loadRuntimeConfig().then(({ raw, version, error }) => {
+      const result = error ? { ok: false, errors: [error] } : S.validateConfig(raw);
       if (!result.ok) {
         errorCard.hidden = false;
-        errorDetail.textContent = result.errors.join(" / ") + " - CHECK config.json OR THE CONTROL ROOM AT /config, THEN RELOAD";
+        errorDetail.textContent = result.errors.join(" / ").toUpperCase() + " - FIX THE FILE, OR SAVE FROM THE CONTROL ROOM AT /config TO WRITE A GOOD ONE";
+        // The bus still runs, so a save from the room brings the set back
+        // without anyone touching it.
+        startBus({ command() {} }, null);
         return;
       }
       const cfg = result.cfg;

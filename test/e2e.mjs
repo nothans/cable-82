@@ -136,12 +136,26 @@ try {
   await page.goto(base + "/");
   const visible = (sel) => page.evaluate((s) => { const e = document.querySelector(s); return !!e && !e.hidden; }, sel);
 
-  // Sign on: the lowest number is the guide.
-  check("the set signs on to channel 0, the guide", await until(() => visible("#guide-layer"), 5000));
+  // Sign on: a fresh set comes up on the board, the one channel every
+  // install has of its own.
+  check("the set signs on to channel 82, the board", await until(async () => !(await visible("#guide-layer")) && (await page.textContent("#ch-name")) === "E2E 82", 5000));
+  check("the bus counts one listener", (await (await fetch(base + "/api/tune")).json()).listeners === 1);
+
+  // The guide.
+  await tune({ cmd: "set", channel: 0 });
+  check("set 0 puts the guide on the air", await until(() => visible("#guide-layer"), 5000));
   const rows = await page.evaluate(() => document.querySelectorAll("#guide-rows .guide-row").length);
   check("the guide lists every enabled channel", rows === (clips ? 4 : 3), "rows=" + rows);
   check("the guide clock is running", /\d:\d\d/.test(await page.textContent("#guide-clock")));
-  check("the bus counts one listener", (await (await fetch(base + "/api/tune")).json()).listeners === 1);
+  check("the on-screen display is a centered plate in the upper third, with a dark backing", await page.evaluate(() => {
+    const el = document.getElementById("channel-bug");
+    const bug = el.getBoundingClientRect();
+    const stage = document.getElementById("stage").getBoundingClientRect();
+    const centered = Math.abs((bug.left + bug.right) / 2 - (stage.left + stage.right) / 2) < 2;
+    const upper = (bug.top + bug.bottom) / 2 < stage.top + stage.height * 0.4;
+    const backed = /rgba\(\d+, \d+, \d+, 0\.[5-9]/.test(getComputedStyle(el).backgroundColor);
+    return centered && upper && backed;
+  }));
 
   // The board.
   await tune({ cmd: "set", channel: 82 });
@@ -179,7 +193,14 @@ try {
 
   // The volume and power keys.
   await tune({ cmd: "volume" });
-  check("the volume key steps to SOUND OFF", await until(async () => (await page.textContent("#bug-name")) === "SOUND OFF", 3000));
+  check("the volume key steps to sound off, drawn as an empty meter", await until(() => page.evaluate(() => {
+    const m = document.getElementById("bug-meter");
+    return document.getElementById("bug-number").textContent === "VOLUME" && !m.hidden && m.children.length === 8 && m.querySelectorAll(".on").length === 0;
+  }), 3000));
+  await tune({ cmd: "volume" });
+  check("one more step is soft: three cells", await until(() => page.evaluate(() => document.querySelectorAll("#bug-meter .on").length === 3), 3000));
+  await tune({ cmd: "volume" }); await tune({ cmd: "volume" }); // medium, loud
+  await new Promise((r) => setTimeout(r, 300));
   await tune({ cmd: "power" });
   check("the power key darkens the set", await until(() => visible("#power-off"), 3000));
   await tune({ cmd: "set", channel: 82 });
@@ -211,7 +232,8 @@ try {
   await room.goto(base + "/config");
   check("the control room loads the config", await until(async () => /Loaded/.test(await room.textContent("#status")), 5000));
   const groups = await room.evaluate(() => Array.from(document.querySelectorAll(".group-head")).map((h) => h.textContent));
-  check("the room shows the five groups", groups.join("|") === "Server|Display|Channels|Channel Preview|Community Board", groups.join("|"));
+  check("the room shows the six groups, quick settings first", groups.join("|") === "Quick settings|Channels|Community Board|Channel Preview|Display|Server", groups.join("|"));
+  check("the vitals panel fills in", await until(async () => (await room.locator("#vitals .vital").count()) >= 4, 5000));
   check("the power panel stays hidden off a Pi", await room.evaluate(() => document.getElementById("p-power").hidden));
   check("the room names the channel", (await room.inputValue("#f-channelName")) === "E2E 83");
   await room.fill("#f-tagline", "SAVED FROM THE ROOM");
@@ -227,6 +249,30 @@ try {
   await remote.click(".key[data-cmd=\"up\"]");
   check("a key on the remote reports the press", await until(async () => /Channel higher/.test(await remote.textContent("#status")), 3000));
   await remote.close();
+
+  // A broken config.json at first start: the set says so instead of
+  // showing factory defaults, and a Save from the room brings it back.
+  const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), "cable82-e2e-broken-"));
+  fs.writeFileSync(path.join(tmp2, "config.json"), "{ this is not json");
+  const app2 = createApp({ configPath: path.join(tmp2, "config.json"), mediaScanDirs: [] });
+  await new Promise((r) => app2.listen(0, "127.0.0.1", r));
+  const base2 = "http://127.0.0.1:" + app2.address().port;
+  const broken = await context.newPage();
+  await broken.goto(base2 + "/");
+  check("a broken config.json shows the error card, with the line and column", await until(async () => {
+    const card = await broken.evaluate(() => ({ shown: !document.getElementById("error-card").hidden, text: document.getElementById("error-detail").textContent }));
+    return card.shown && /LINE 1, COLUMN 3/.test(card.text);
+  }, 5000));
+  const room2 = await context.newPage();
+  await room2.goto(base2 + "/config");
+  check("the room names the broken file rather than blaming the server", await until(async () => /config\.json could not be read/.test(await room2.textContent("#status")), 5000));
+  await room2.click("#save");
+  check("a Save from the room writes a good file over it", await until(async () => /Saved/.test(await room2.textContent("#status")), 5000));
+  check("and the set comes back on its own", await until(() => broken.evaluate(() => document.getElementById("error-card").hidden && document.getElementById("ch-name").textContent === "CABLE 82").catch(() => false), 8000));
+  await broken.close();
+  await room2.close();
+  app2.close();
+  fs.rmSync(tmp2, { recursive: true, force: true });
 
   check("no page errors on the display", pageErrors.length === 0, pageErrors.slice(0, 3).join(" | "));
 } finally {

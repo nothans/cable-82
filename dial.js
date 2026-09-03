@@ -101,6 +101,9 @@
   // Acts need every program duration up front; a spot whose length is not
   // known yet sits out until the probe learns it. No usable spots (an empty
   // or unprobed folder) means the program folder plays whole.
+  // Every segment carries `kind` ("program" or "spot") and the file's
+  // `title` (from its metadata, when the server read one), so the guide can
+  // name what is on without guessing from the URL.
   function channelTimeline(channel, files, spots, date) {
     const day = date.getFullYear() + "-" + (date.getMonth() + 1) + "-" + date.getDate();
     const program = orderFiles(files || [], channel.order, day + "#" + channel.number);
@@ -108,8 +111,8 @@
     const pool = b
       ? orderFiles((spots || []).filter((f) => f.duration > 0), channel.order, day + "#" + channel.number + "#breaks")
       : [];
-    const whole = (f) => ({ file: f.file, url: f.url, from: 0, to: f.duration, duration: f.duration });
-    if (!b || !pool.length || program.some((f) => !(f.duration > 0))) return program.map(whole);
+    const whole = (f, kind) => ({ kind, file: f.file, title: f.title || null, url: f.url, from: 0, to: f.duration, duration: f.duration });
+    if (!b || !pool.length || program.some((f) => !(f.duration > 0))) return program.map((f) => whole(f, "program"));
     const actLen = b.everyMinutes * 60;
     const out = [];
     let cursor = 0;
@@ -118,8 +121,8 @@
       for (let a = 0; a < acts; a++) {
         const from = (p.duration * a) / acts;
         const to = a === acts - 1 ? p.duration : (p.duration * (a + 1)) / acts;
-        out.push({ file: p.file, url: p.url, from, to, duration: to - from });
-        for (let k = 0; k < b.spots; k++) out.push(whole(pool[cursor++ % pool.length]));
+        out.push({ kind: "program", file: p.file, title: p.title || null, url: p.url, from, to, duration: to - from });
+        for (let k = 0; k < b.spots; k++) out.push(whole(pool[cursor++ % pool.length], "spot"));
       }
     }
     return out;
@@ -230,9 +233,20 @@
     return out;
   }
 
+  // What the guide calls one segment of a channel, by the channel's titles
+  // setting: the cleaned file name, the title written inside the file (the
+  // file name when it has none), or one fixed name for the whole channel.
+  function segmentName(channel, seg) {
+    if (channel.titles === "fixed") return channel.title || channel.name || programTitle(seg.file);
+    if (channel.titles === "metadata" && seg.title) return String(seg.title).toUpperCase();
+    return programTitle(seg.file);
+  }
+
   // What one channel is showing at a moment. Video channels answer from the
   // same broadcast clock the player runs on, so the guide can never disagree
-  // with the picture; everything else answers for what it is.
+  // with the picture; everything else answers for what it is. A commercial
+  // break is never the answer: the guide names the program the break sits
+  // inside (the act before it), the way a printed grid would.
   function programAt(channel, lib, date, epochMs) {
     if (!channel || channel.enabled === false) return null;
     if (channel.type === "guide") return { title: "PROGRAM GUIDE", kind: "guide" };
@@ -245,8 +259,15 @@
     const tl = channelTimeline(channel, files, (lib && lib.spots) || [], date);
     const pos = positionAt(tl, date.getTime(), epochMs);
     if (!pos) return { title: "TO BE ANNOUNCED", kind: "unknown" };
-    const seg = tl[pos.index];
-    return { title: programTitle(seg.file), kind: "program", file: seg.file };
+    let i = pos.index;
+    if (tl[i].kind === "spot") {
+      let j = i;
+      while (j >= 0 && tl[j].kind === "spot") j--;
+      if (j < 0) { j = i; while (j < tl.length && tl[j].kind === "spot") j++; }
+      if (j >= 0 && j < tl.length) i = j;
+    }
+    const seg = tl[i];
+    return { title: segmentName(channel, seg), kind: "program", file: seg.file };
   }
 
   // The grid: a row per channel, and within a row the cells merged wherever
@@ -282,6 +303,7 @@
     VOLUME_STEPS,
     nextVolumeStep,
     programTitle,
+    segmentName,
     guideSlots,
     programAt,
     guideGrid,

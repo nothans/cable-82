@@ -564,6 +564,164 @@ test("a restart stops the station and flushes the disks before handing over", as
   }
 });
 
+// ---------- titles inside the files ----------
+
+// A minimal MP4 built by hand: ftyp, then moov holding udta/meta/ilst/©nam,
+// the way ffmpeg -metadata title= writes it. Enough structure for the reader
+// and nothing a decoder would want.
+function atom(type, ...bodies) {
+  const body = Buffer.concat(bodies.map((b) => (Buffer.isBuffer(b) ? b : Buffer.from(b, "latin1"))));
+  const head = Buffer.alloc(8);
+  head.writeUInt32BE(body.length + 8, 0);
+  head.write(type, 4, "latin1");
+  return Buffer.concat([head, body]);
+}
+function itunesMp4(title) {
+  const data = atom("data", Buffer.from([0, 0, 0, 1, 0, 0, 0, 0]), Buffer.from(title, "utf8"));
+  const nam = atom("\xa9nam", data);
+  const hdlr = atom("hdlr", Buffer.alloc(24));
+  const meta = atom("meta", Buffer.alloc(4), hdlr, atom("ilst", nam)); // full box: 4 bytes of version/flags first
+  const moov = atom("moov", atom("mvhd", Buffer.alloc(100)), atom("udta", meta));
+  return Buffer.concat([atom("ftyp", "isom", Buffer.alloc(8)), atom("mdat", Buffer.alloc(64)), moov]);
+}
+
+test("readMp4Title finds an iTunes-style title, and answers null for everything else", () => {
+  const { readMp4Title, titleFromMoov } = require("../media-meta.js");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cable82-mp4-"));
+  const good = path.join(dir, "titled.mp4");
+  fs.writeFileSync(good, itunesMp4("Give Blood"));
+  assert.equal(readMp4Title(good), "Give Blood");
+  const untitled = path.join(dir, "plain.mp4");
+  fs.writeFileSync(untitled, Buffer.concat([atom("ftyp", "isom", Buffer.alloc(8)), atom("moov", atom("mvhd", Buffer.alloc(100)))]));
+  assert.equal(readMp4Title(untitled), null);
+  const notMp4 = path.join(dir, "notes.mp4");
+  fs.writeFileSync(notMp4, "this is not a video");
+  assert.equal(readMp4Title(notMp4), null);
+  assert.equal(readMp4Title(path.join(dir, "missing.mp4")), null);
+  // 3GPP titl, and a QuickTime keys title
+  const moovTitl = Buffer.concat([atom("udta", atom("titl", Buffer.from([0, 0, 0, 0, 0x15, 0xc7]), "Old Phone Clip\0"))]);
+  assert.equal(titleFromMoov(moovTitl), "Old Phone Clip");
+  const key = "com.apple.quicktime.title";
+  const keys = atom("keys", Buffer.from([0, 0, 0, 0, 0, 0, 0, 1]), atom("mdta", key));
+  const item = atom("\0\0\0\x01", atom("data", Buffer.from([0, 0, 0, 1, 0, 0, 0, 0]), "Camera Roll"));
+  const qt = atom("meta", atom("hdlr", Buffer.alloc(24)), keys, atom("ilst", item)); // QuickTime: no version/flags
+  assert.equal(titleFromMoov(qt), "Camera Roll");
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("a channel set to metadata titles gets them in its listing, cached beside the videos", async () => {
+  const upstreamPort = upstream.address().port;
+  const dir = path.join(tmpDir, "channels", "titled");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "BBDVD0102.mp4"), itunesMp4("Give Blood"));
+  fs.writeFileSync(path.join(dir, "BBDVD0103.mp4"), Buffer.concat([atom("ftyp", "isom", Buffer.alloc(8)), atom("moov", atom("mvhd", Buffer.alloc(100)))]));
+  writeConfig(
+    Object.assign(configFor(upstreamPort), {
+      channels: [
+        { number: 82, type: "bulletin" },
+        { number: 5, type: "video", folder: "titled", titles: "metadata" },
+        { number: 6, type: "video", folder: "titled" },
+      ],
+    }),
+    14
+  );
+  const j = await (await fetch(base + "/api/channels")).json();
+  const five = j.channels.find((c) => c.number === 5);
+  assert.deepEqual(five.files.map((f) => f.title), ["Give Blood", null], "a title where there is one, null where there is not");
+  const six = j.channels.find((c) => c.number === 6);
+  assert.ok(!("title" in six.files[0]), "a channel on file names is not made to read anything");
+  const cache = JSON.parse(fs.readFileSync(path.join(dir, ".titles.json"), "utf8"));
+  assert.deepEqual(cache, { "BBDVD0102.mp4": "Give Blood", "BBDVD0103.mp4": null });
+  writeConfig(configFor(upstreamPort), 16);
+});
+
+test("the schema keeps a channel's titles setting and gives a fixed name the channel's own", () => {
+  const { validateConfig } = require("../config-schema.js");
+  const r = validateConfig({
+    channels: [
+      { number: 3, type: "video", folder: "spots", titles: "fixed", title: "Commercials" },
+      { number: 4, type: "video", folder: "spots", name: "LATE NIGHT", titles: "fixed" },
+      { number: 5, type: "video", folder: "spots", titles: "metadata" },
+      { number: 6, type: "video", folder: "spots", titles: "nonsense" },
+    ],
+  });
+  const by = Object.fromEntries(r.cfg.channels.map((c) => [c.number, c]));
+  assert.equal(by[3].titles, "fixed");
+  assert.equal(by[3].title, "Commercials");
+  assert.equal(by[4].title, "LATE NIGHT", "an empty fixed name is the channel's name");
+  assert.equal(by[5].titles, "metadata");
+  assert.ok(!("title" in by[5]));
+  assert.equal(by[6].titles, "filename");
+});
+
+// ---------- a broken config.json, told rather than hidden ----------
+
+test("a broken config.json while running is reported as a warning, with the line and column", async () => {
+  const upstreamPort = upstream.address().port;
+  writeConfig('{\n  "channelName": "OOPS",\n  "tagline": ,\n}', 18);
+  const r = await fetch(base + "/api/config");
+  assert.equal(r.status, 200, "the last good config is still served");
+  const j = await r.json();
+  assert.match(j.warning, /config\.json could not be read/);
+  assert.match(j.warning, /line 3, column \d+/);
+  assert.match(j.warning, /Save from here/);
+  writeConfig(configFor(upstreamPort), 20);
+  const back = await (await fetch(base + "/api/config")).json();
+  assert.equal(back.warning, undefined, "fixed on disk: the warning goes");
+});
+
+test("a broken config.json at first start answers 500 with the reason, not a bare error", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cable82-broken-"));
+  const cfgPath = path.join(dir, "config.json");
+  fs.writeFileSync(cfgPath, "{ this is not json");
+  const app2 = createApp({ configPath: cfgPath, mediaScanDirs: [] });
+  await new Promise((r) => app2.listen(0, "127.0.0.1", r));
+  const base2 = "http://127.0.0.1:" + app2.address().port;
+  try {
+    const r = await fetch(base2 + "/api/config");
+    assert.equal(r.status, 500);
+    const j = await r.json();
+    assert.equal(j.ok, false);
+    assert.match(j.error, /config\.json could not be read: .*line 1, column 3/);
+    // and a Save from the control room writes a good file over it
+    const save = await fetch(base2 + "/api/config", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-cable82-config": "1" },
+      body: JSON.stringify({ channelName: "REPAIRED" }),
+    });
+    assert.equal(save.status, 200);
+    const after = await (await fetch(base2 + "/api/config")).json();
+    assert.equal(after.config.channelName, "REPAIRED");
+    assert.equal(after.warning, undefined);
+  } finally {
+    app2.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------- vitals ----------
+
+test("GET /api/vitals reports the host, uptime, load, memory, disks, and listeners", async () => {
+  const r = await fetch(base + "/api/vitals");
+  assert.equal(r.status, 200);
+  const v = await r.json();
+  assert.equal(typeof v.host.name, "string");
+  assert.equal(typeof v.host.pi, "boolean");
+  assert.equal(v.host.node, process.versions.node);
+  assert.ok(v.uptimeSec > 0);
+  assert.ok(v.station.uptimeSec >= 0);
+  assert.equal(v.load.length, 3);
+  assert.ok(v.memory.totalBytes > v.memory.freeBytes);
+  assert.ok(v.memory.usedPercent >= 0 && v.memory.usedPercent <= 100);
+  assert.ok(v.cpu.count >= 1);
+  assert.ok(v.cpu.temperatureC === null || typeof v.cpu.temperatureC === "number");
+  assert.ok(v.cpu.throttled === null || typeof v.cpu.throttled === "object");
+  assert.ok(Array.isArray(v.disks));
+  for (const d of v.disks) assert.ok(d.totalBytes >= d.freeBytes && typeof d.label === "string");
+  assert.equal(typeof v.listeners, "number");
+  assert.match(v.at, /^\d{4}-\d{2}-\d{2}T/);
+});
+
 test("GET /api/version reports the release, the build, and the repo", async () => {
   const r = await fetch(base + "/api/version");
   assert.equal(r.status, 200);

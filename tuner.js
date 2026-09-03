@@ -50,6 +50,7 @@
       bug: document.getElementById("channel-bug"),
       bugNumber: document.getElementById("bug-number"),
       bugName: document.getElementById("bug-name"),
+      bugMeter: document.getElementById("bug-meter"),
       power: document.getElementById("power-off"),
       crtLine: document.getElementById("crt-line"),
     };
@@ -107,16 +108,29 @@
     };
 
     // ---------------- the channel bug
+    // One on-screen display for everything the set has to say for a moment:
+    // the channel on a tune, the digits as they are typed, the volume as a
+    // meter. A plate in the upper third of the picture, dark behind light
+    // type, so it reads over a bright program, a white web page, and the
+    // board's own masthead alike.
     let noticeTimer = null;
-    function notice(bigText, smallText) {
-      L.bugNumber.textContent = bigText;
-      L.bugName.textContent = smallText || "";
+    const METER_CELLS = 8;
+    for (let i = 0; i < METER_CELLS; i++) L.bugMeter.appendChild(document.createElement("i"));
+    function notice({ big, small, meter }) {
+      L.bugNumber.textContent = big || "";
+      L.bugName.textContent = small || "";
+      L.bugName.hidden = !small;
+      L.bugMeter.hidden = meter == null;
+      if (meter != null) {
+        const filled = Math.round(meter * METER_CELLS);
+        Array.from(L.bugMeter.children).forEach((cell, i) => cell.classList.toggle("on", i < filled));
+      }
       L.bug.hidden = false;
       L.bug.classList.remove("fading");
       clearTimeout(noticeTimer);
       noticeTimer = setTimeout(() => L.bug.classList.add("fading"), 2600);
     }
-    const banner = (numberText, nameText) => notice("CH " + numberText, nameText);
+    const banner = (numberText, nameText) => notice({ big: "CH " + numberText, small: nameText });
 
     // ---------------- off-air card
     let cardTimer = null;
@@ -179,9 +193,16 @@
     let tuning = false;
     let activeStops = [];
 
-    const remembered = Number(sessionStorage.getItem("cable82.tuner.channel"));
-    const ri = dial.findIndex((c) => c.number === remembered);
-    if (ri >= 0) dialIndex = ri;
+    // Where the set signs on: the channel it was on before a reload, else
+    // the board, the one channel every install has of its own and the one
+    // with something moving on it. The lowest number only when there is no
+    // board on the dial at all.
+    // (A missing memory must not read as channel 0: Number(null) is 0, and
+    // 0 is the guide, which is how every fresh set used to sign on there.)
+    const stored = sessionStorage.getItem("cable82.tuner.channel");
+    const ri = stored === null ? -1 : dial.findIndex((c) => c.number === Number(stored));
+    const home = dial.findIndex((c) => c.type === "bulletin");
+    dialIndex = ri >= 0 ? ri : home >= 0 ? home : 0;
 
     // Start one channel's view. Non-bulletin views cover the suspended
     // board; bulletin views wake it. Returns the stop functions for leaving.
@@ -275,7 +296,7 @@
       if (!powered) return;
       const i = dial.findIndex((c) => c.number === n);
       if (i >= 0) tuneToIndex(i);
-      else banner(n, "NO SUCH CHANNEL");
+      else notice({ big: "CH " + n, small: "NO SUCH CHANNEL" });
     }
 
     // ---------------- the volume key
@@ -285,12 +306,15 @@
       video.applySound();
       board.setSoundLevel(soundLevel());
     }
+    // The level is drawn, not written: a row of cells that fill as the key
+    // steps up, empty at sound off. Words the size of a channel name could
+    // not be read across a room; eight boxes can.
     function volumeKey() {
       if (!powered) return;
       volumeStep = nextVolumeStep(volumeStep);
       try { sessionStorage.setItem("cable82.tuner.volume", String(volumeStep)); } catch (e) { /* fine */ }
       applySound();
-      notice("VOLUME", VOLUME_STEPS[volumeStep].name);
+      notice({ big: "VOLUME", meter: VOLUME_STEPS[volumeStep].level });
     }
 
     // ---------------- the power key
@@ -390,7 +414,7 @@
     function pushDigit(d) {
       if (!powered) return;
       digits = (digits + d).slice(0, 3);
-      banner(digits, "");
+      notice({ big: "CH " + digits });
       clearTimeout(digitTimer);
       if (digits.length >= 3) commitDigits();
       else digitTimer = setTimeout(commitDigits, 1200);

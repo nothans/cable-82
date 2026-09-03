@@ -58,6 +58,10 @@
     return "CHANNEL " + number;
   }
   const CHANNEL_ORDERS = new Set(["sequence", "shuffle-daily"]);
+  // What the guide calls a video channel's programs: the file names, the
+  // title written inside each file, or one fixed name for the whole channel
+  // (a folder of commercials is "COMMERCIALS", whatever the files are called).
+  const TITLE_MODES = new Set(["filename", "metadata", "fixed"]);
   const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
   // A channel folder is one plain path segment under channels/ - no
   // separators, no traversal, no leading dot. The server enforces it again.
@@ -457,6 +461,10 @@
         ch.mode = c.mode === "schedule" ? "schedule" : "continuous";
         ch.order = CHANNEL_ORDERS.has(c.order) ? c.order : "sequence";
         ch.offAir = OFFAIR_MODES.has(c.offAir) ? c.offAir : "testcard";
+        ch.titles = TITLE_MODES.has(c.titles) ? c.titles : "filename";
+        // The fixed name falls back to the channel's own name, which is
+        // usually what a one-subject channel wants the guide to say anyway.
+        if (ch.titles === "fixed") ch.title = sanitize(c.title, 40) || ch.name;
         ch.schedule = (Array.isArray(c.schedule) ? c.schedule : [])
           .map((w) => validateWindow(w, errors, number))
           .filter(Boolean);

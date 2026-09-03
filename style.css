@@ -123,6 +123,11 @@ html, body { height: 100%; background: var(--letterbox); }
   overflow: hidden;
   background: var(--c-blue);
 }
+/* Nothing on the page shrinks to fit: content that is too tall overflows,
+   which is what the fit pass in board.js measures. Let flex squeeze the
+   text box instead and a five-line headline loses half its last line
+   with the page reporting that everything fits. */
+#page > * { flex-shrink: 0; }
 
 #page-kicker {
   font-size: calc(var(--u) * 20 * var(--ts));
@@ -354,10 +359,13 @@ html, body { height: 100%; background: var(--letterbox); }
 #guide-clock { font-size: calc(var(--u) * 28 * var(--ts)); letter-spacing: 0.04em; white-space: nowrap; }
 
 /* The column heads and the rows share one grid so the columns line up. */
+/* The channel column does not grow with the text size: at 1.25 on a 640
+   tube it would take the time columns' room and wrap every "10:30 AM".
+   Names wrap to two lines inside it instead (below). */
 #guide-cols,
 .guide-row {
   display: grid;
-  grid-template-columns: calc(var(--u) * 165 * var(--ts)) repeat(var(--slots, 3), 1fr);
+  grid-template-columns: calc(var(--u) * 172) repeat(var(--slots, 3), 1fr);
   gap: calc(var(--u) * 3);
 }
 #guide-cols {
@@ -400,10 +408,19 @@ html, body { height: 100%; background: var(--letterbox); }
   overflow: hidden;
   line-height: 1.15;
 }
-.guide-row .g-ch { display: flex; gap: calc(var(--u) * 10); align-items: baseline; min-width: 0; }
-/* The name gives way before the number does: a channel you cannot name is
-   still a channel you can tune. */
-.guide-row .g-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.guide-row .g-ch { display: flex; gap: calc(var(--u) * 10); align-items: flex-start; min-width: 0; }
+/* A name wraps to two lines before it is cut; the number never gives way,
+   because a channel you cannot name is still a channel you can tune. */
+.guide-row .g-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  line-height: 1.15;
+  min-width: 0;
+}
 .guide-row .g-num { color: var(--c-yellow); min-width: calc(var(--u) * 40 * var(--ts)); text-align: right; flex: 0 0 auto; }
 .guide-row .g-cell.is-offair,
 .guide-row .g-cell.is-unknown { color: var(--c-white); opacity: 0.62; }
@@ -499,18 +516,46 @@ html, body { height: 100%; background: var(--letterbox); }
   100% { transform: scaleY(1); filter: brightness(1); }
 }
 
-/* The channel bug: shown on every tune, fades on its own. */
+/* The on-screen display: the channel on a tune, the digits as they are
+   typed, the volume as a meter. A plate centered in the upper third of the
+   picture, the way a cable converter drew its number, dark behind light
+   type so it reads over anything: a bright program, a white web page, the
+   board's own masthead. Shown for a moment, fades on its own. */
 #channel-bug {
   position: absolute;
-  left: calc(var(--ovx) + var(--u) * 8);
-  top: calc(var(--ovy) + var(--u) * 46);
+  left: 50%;
+  top: 27%;
+  transform: translate(-50%, -50%);
   z-index: 60;
+  min-width: calc(var(--u) * 210);
+  padding: calc(var(--u) * 14) calc(var(--u) * 30) calc(var(--u) * 12);
+  background: rgba(10, 10, 18, 0.84);
+  border: calc(var(--u) * 3) solid var(--c-white);
   color: var(--c-white);
-  text-shadow: calc(var(--u) * 2) calc(var(--u) * 2) 0 var(--c-ink);
+  text-align: center;
   letter-spacing: 0.06em;
   transition: opacity 0.5s;
 }
 #channel-bug[hidden] { display: none; }
 #channel-bug.fading { opacity: 0; }
-#bug-number { font-size: calc(var(--u) * 34); line-height: 1; }
-#bug-name { font-size: calc(var(--u) * 14); opacity: 0.92; }
+#bug-number { font-size: calc(var(--u) * 56); line-height: 1; }
+#bug-name { font-size: calc(var(--u) * 18); margin-top: calc(var(--u) * 8); white-space: nowrap; }
+#bug-name[hidden] { display: none; }
+/* The volume meter: eight cells, filled from the left as the key steps up,
+   all empty at sound off. Outlined cells are the empties, so the row's full
+   length is always visible and the level reads as a fraction of it. */
+#bug-meter {
+  display: flex;
+  justify-content: center;
+  gap: calc(var(--u) * 6);
+  margin-top: calc(var(--u) * 12);
+}
+#bug-meter[hidden] { display: none; }
+#bug-meter i {
+  display: block;
+  width: calc(var(--u) * 20);
+  height: calc(var(--u) * 26);
+  border: calc(var(--u) * 2) solid var(--c-white);
+  opacity: 0.55;
+}
+#bug-meter i.on { background: var(--c-white); opacity: 1; }

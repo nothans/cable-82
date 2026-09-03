@@ -127,9 +127,16 @@
 
   // ---------------------------------------------------------- render: channels
 
+  const TITLE_OPTIONS = [
+    ["filename", "Guide shows the file names"],
+    ["metadata", "Guide shows the titles inside the files"],
+    ["fixed", "Guide shows one name:"],
+  ];
+
   function folderLabel(f) {
     const mins = Math.round(f.seconds / 60);
-    const dur = f.probed < f.files ? f.files + " files" : f.files + " files, " + (mins >= 60 ? Math.floor(mins / 60) + "h " + (mins % 60) + "m" : mins + "m");
+    const count = f.files === 1 ? "1 file" : f.files + " files";
+    const dur = f.probed < f.files ? count : count + ", " + (mins >= 60 ? Math.floor(mins / 60) + "h " + (mins % 60) + "m" : mins + "m");
     // A folder on a plugged-in drive says so: the same name can mean a
     // different library once the drive is unplugged.
     const where = f.volume ? ", on " + f.volume : "";
@@ -207,6 +214,18 @@
             "aria-label": "Off-air look",
             onchange: (e) => { ch.offAir = e.target.value; },
           }, OFFAIR_OPTIONS.map(([v, label]) => option(v, "Off air: " + label, v === (ch.offAir || "testcard")))));
+        }
+        // What the guide calls this channel's programs.
+        body.appendChild(el("select", {
+          "aria-label": "Program titles in the guide",
+          onchange: (e) => { ch.titles = e.target.value; if (ch.titles !== "fixed") delete ch.title; renderChannels(); },
+        }, TITLE_OPTIONS.map(([v, label]) => option(v, label, v === (ch.titles || "filename")))));
+        if (ch.titles === "fixed") {
+          body.appendChild(el("input", {
+            type: "text", class: "ch-title", maxlength: 40, value: ch.title || "", placeholder: ch.name || "COMMERCIALS",
+            "aria-label": "The one name the guide shows",
+            onchange: (e) => { ch.title = e.target.value; },
+          }));
         }
       }
 
@@ -684,19 +703,34 @@
 
   async function load() {
     setStatus("Loading current channel…");
+    let r;
     try {
-      const r = await fetch("api/config", { cache: "no-store" });
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      const j = await r.json();
-      bootVersion = j.version;
-      fill(j.config);
-      $("app").setAttribute("aria-busy", "false");
-      $("save").disabled = false;
-      setStatus("Loaded. Edit anything, then Save.");
-      startDriftWatch();
+      r = await fetch("api/config", { cache: "no-store" });
     } catch (e) {
-      setStatus("Could not reach the server (" + e.message + "). Is CABLE 82 running?", "err");
+      return setStatus("Could not reach the server (" + e.message + "). Is CABLE 82 running?", "err");
     }
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j || !j.config) {
+      // The server answered but has nothing good to serve: a config.json it
+      // could not read. Say that, with the line and column, and offer the
+      // way out: a Save from here writes a good file over it. The form is
+      // filled from the bundled defaults so there is something to save.
+      if (j && j.error) {
+        bootVersion = null;
+        fill(S.validateConfig(S.DEFAULT_CONFIG).cfg);
+        $("app").setAttribute("aria-busy", "false");
+        $("save").disabled = false;
+        return setStatus(j.error + ". Nothing is on the air. Fix the file by hand, or Save from here to write the defaults over it.", "err");
+      }
+      return setStatus("The server answered " + r.status + " and did not say why. Check its log.", "err");
+    }
+    bootVersion = j.version;
+    fill(j.config);
+    $("app").setAttribute("aria-busy", "false");
+    $("save").disabled = false;
+    if (j.warning) setStatus(j.warning, "warn");
+    else setStatus("Loaded. Edit anything, then Save.");
+    startDriftWatch();
   }
 
   // Warn if config.json moves while this screen is open (a hand edit, or a
@@ -710,7 +744,9 @@
         const r = await fetch("api/config", { cache: "no-store" });
         if (!r.ok) return;
         const j = await r.json();
-        if (bootVersion && j.version && j.version !== bootVersion) {
+        if (j.warning) {
+          setStatus(j.warning, "warn"); // the file on disk broke since we loaded
+        } else if (bootVersion && j.version && j.version !== bootVersion) {
           setStatus("config.json changed outside this screen. Reload the page to load it; a stale Save will be refused.", "warn");
         }
       } catch (e) {
@@ -881,6 +917,67 @@
       : "Build " + v.build + ". Past the last tag, or with local edits.";
   }
 
+  // ------------------------------------------------- vitals
+
+  const GB = (b) => (b / 1073741824).toFixed(b < 10737418240 ? 1 : 0) + " GB";
+  function ago(sec) {
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    if (d) return d + "d " + h + "h";
+    if (h) return h + "h " + m + "m";
+    return m + "m";
+  }
+
+  function vital(label, value, sub, tone) {
+    return el("div", { class: "vital" }, [
+      el("label", null, label),
+      el("div", { class: "v" + (tone ? " " + tone : "") }, value),
+      sub ? el("div", { class: "sub" }, sub) : null,
+    ]);
+  }
+
+  async function loadVitals() {
+    let v = null;
+    try {
+      const r = await fetch("api/vitals", { cache: "no-store" });
+      if (r.ok) v = await r.json();
+    } catch (e) {
+      /* offline: leave the last reading */
+    }
+    if (!v) return;
+    const host = $("vitals");
+    host.innerHTML = "";
+    host.appendChild(vital("Up", ago(v.uptimeSec), "the station for " + ago(v.station.uptimeSec)));
+    const mem = v.memory;
+    host.appendChild(vital("Memory", mem.usedPercent + "% used", GB(mem.freeBytes) + " free of " + GB(mem.totalBytes), mem.usedPercent > 90 ? "bad" : mem.usedPercent > 75 ? "warn" : ""));
+    if (v.swap && v.swap.totalBytes) {
+      const usedPct = Math.round(((v.swap.totalBytes - v.swap.freeBytes) / v.swap.totalBytes) * 100);
+      host.appendChild(vital("Swap", usedPct + "% used", GB(v.swap.freeBytes) + " free of " + GB(v.swap.totalBytes), usedPct > 50 ? "warn" : ""));
+    }
+    host.appendChild(vital("Load", v.load.join("  "), v.cpu.count + " cores, 1 / 5 / 15 min", v.load[0] > v.cpu.count ? "warn" : ""));
+    if (v.cpu.temperatureC != null) {
+      host.appendChild(vital("CPU", v.cpu.temperatureC + " °C", v.cpu.temperatureC >= 80 ? "throttling starts at 80" : "", v.cpu.temperatureC >= 80 ? "bad" : v.cpu.temperatureC >= 70 ? "warn" : ""));
+    }
+    const t = v.cpu.throttled;
+    if (t) {
+      const now = [t.underVoltageNow && "under-voltage", t.throttledNow && "throttled", t.frequencyCappedNow && "frequency capped", t.softTempLimitNow && "temperature limit"].filter(Boolean);
+      const since = [t.underVoltageSinceBoot && "under-voltage", t.throttledSinceBoot && "throttled", t.frequencyCappedSinceBoot && "capped", t.softTempLimitSinceBoot && "temperature limit"].filter(Boolean);
+      host.appendChild(vital("Power", now.length ? now.join(", ") : "OK", since.length ? "since boot: " + since.join(", ") + " (" + t.raw + ")" : t.raw, now.length ? "bad" : since.length ? "warn" : ""));
+    }
+    for (const d of v.disks) {
+      const usedPct = Math.round(((d.totalBytes - d.freeBytes) / d.totalBytes) * 100);
+      host.appendChild(vital("Disk, " + d.label, GB(d.freeBytes) + " free", usedPct + "% of " + GB(d.totalBytes) + " used", d.freeBytes < 1073741824 ? "bad" : usedPct > 90 ? "warn" : ""));
+    }
+    host.appendChild(vital("Sets listening", String(v.listeners), v.listeners ? "on the tuner bus" : "open the display"));
+    $("vitalsNote").textContent = (v.host.model || v.host.name) + ", " + v.host.platform + " " + v.host.arch + ", Node " + v.host.node + ". Read " + new Date(v.at).toLocaleTimeString() + ".";
+  }
+
+  function startVitals() {
+    loadVitals();
+    setInterval(() => { if (!document.hidden) loadVitals(); }, 10000);
+  }
+
   // Restart and shut down, offered only where they would work: a Raspberry Pi
   // whose user can power it without a password. Each button arms first and
   // fires on the second press, because there is no undo for either.
@@ -986,7 +1083,7 @@
       let n = 2;
       while (channels.some((c) => c.number === n)) n++;
       if (!channels.length) channels.push({ number: 82, name: "", type: "bulletin", enabled: true });
-      else channels.push({ number: n, name: "", type: "video", enabled: true, folder: "", mode: "continuous", order: "sequence", offAir: "testcard" });
+      else channels.push({ number: n, name: "", type: "video", enabled: true, folder: "", mode: "continuous", order: "sequence", offAir: "testcard", titles: "filename" });
       renderChannels();
     });
     $("f-facts").addEventListener("input", updateCounts);
@@ -997,6 +1094,7 @@
     wireGroupNav();
     loadVersion();
     loadPower();
+    startVitals();
     $("save").addEventListener("click", save);
     $("revert").addEventListener("click", load);
     load();

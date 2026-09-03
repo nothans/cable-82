@@ -1,8 +1,10 @@
-/* CABLE 82 remote control: a 1960s Zenith Space Command, drawn in CSS.
-   Identity: the object leads and the page recedes. A tinted charcoal ground,
-   a chrome slab, a near-black plate with pinstripe rules, ivory keys and one
-   orange one, a serif wordmark. Every dimension is in em off the remote's
-   own width, so the same drawing fits a phone held upright or a laptop. */
+/* CABLE 82 remote control: a page of the board, in your hand.
+   Identity: the station's own. The header band with the reversed bug, four
+   full-bleed color pages as keys in the broadcast palette, the VGA face for
+   every word, hard white rules between the bands, and the LATEST crawl band
+   carrying the status line. Flat color, no gradients, no shadows: the
+   remote is drawn by the same character generator as the channel. Sized in
+   viewport units so a phone held upright gets one screen, no scrolling. */
 
 @font-face {
   font-family: "VGA";
@@ -11,244 +13,190 @@
 }
 
 :root {
-  --ground: #1b1c22;
-  --ink: #e7e9f0;
-  --ink-dim: #a9adb8;
-  --warn: #e0b04a;
-  --link: #8fa6ff;
-  --chrome-hi: #f1f1ef;
-  --chrome: #b9bcbd;
-  --chrome-lo: #6f7377;
-  --plate: #17171a;
-  --pinstripe: rgba(234, 230, 216, 0.82);
-  --ivory: #ddd7c5;
-  --ivory-lo: #a79f8a;
-  --orange: #e8891c;
-  --orange-lo: #a85d0e;
-  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --serif: Georgia, "Times New Roman", Times, serif;
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --blue: #2038C8;
+  --cyan: #20A8B8;
+  --green: #18A038;
+  --red: #C03028;
+  --white: #F0F0EC;
+  --ink: #101018;
+  --rule: 5px;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
 html, body {
   margin: 0;
   min-height: 100%;
-  background: var(--ground);
-  color: var(--ink);
-  font-family: var(--sans);
-  font-size: 16px;
-  line-height: 1.5;
+  background: var(--blue);
+  color: var(--white);
+  font-family: "VGA", ui-monospace, monospace;
+  text-transform: uppercase;
+  -webkit-text-size-adjust: 100%;
 }
 
-#stage {
+#remote {
   min-height: 100vh;
   min-height: 100dvh;
-  box-sizing: border-box;
-  padding: 24px 16px 32px;
+  display: flex;
+  flex-direction: column;
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+/* ---------------------------------------------------------- the header band */
+
+#band {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  padding: max(18px, env(safe-area-inset-top)) 20px 14px;
+  background: var(--blue);
+  border-bottom: var(--rule) solid var(--white);
+}
+#bug {
+  background: var(--white);
+  color: var(--blue);
+  font-size: clamp(26px, 8vw, 34px);
+  line-height: 1;
+  padding: 6px 14px 3px;
+  letter-spacing: 2px;
+  white-space: nowrap;
+}
+#sub {
+  font-size: 13px;
+  letter-spacing: 3px;
+  padding-bottom: 4px;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------- the keys */
+
+#keys {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.key {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  text-transform: inherit;
+  color: var(--white);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 24px;
-}
-
-/* ---------------------------------------------------------- the slab */
-
-#remote {
-  /* Sized to fit the viewport whole, status line and all: the slab is 1.8
-     times taller than it is wide, and the text under it needs ~150px. */
-  --w: min(92vw, calc((100vh - 150px) / 1.8), 400px);
-  --w: min(92vw, calc((100dvh - 150px) / 1.8), 400px);
-  width: var(--w);
-  font-size: calc(var(--w) / 100); /* 1em = 1% of the remote's width */
-  aspect-ratio: 1 / 1.8; /* a squat block that fills a palm, not a wand */
-  position: relative;
-  border-radius: 4.5em;
-  /* A chrome brow above the plate for the medallion, a shallower chin below. */
-  padding: 36em 7em 22em;
-  box-sizing: border-box;
-  background:
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 3px),
-    linear-gradient(165deg, var(--chrome-hi) 0%, #cfd1cf 16%, #9ea1a3 44%, var(--chrome) 60%, var(--chrome-lo) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.75),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
-    0 22px 44px -14px rgba(8, 9, 16, 0.7);
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-#medallion {
-  position: absolute;
-  top: 9em;
-  left: 50%;
-  width: 10em;
-  height: 10em;
-  box-sizing: border-box;
-  transform: translateX(-50%);
-  border-radius: 50%;
-  border: 0.7em solid #e6e6e3;
-  background: #2038c8;
-  color: #f0f0ec;
-  display: grid;
-  place-items: center;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(0, 0, 0, 0.4);
-}
-#medallion span {
-  font-family: "VGA", monospace;
-  font-size: 5em;
-  line-height: 1;
-  padding-top: 0.1em; /* the bitmap face sits high in its box */
-}
-
-/* ---------------------------------------------------------- the plate */
-
-#plate {
-  height: 100%;
-  box-sizing: border-box;
-  border-radius: 2.4em;
-  background: var(--plate);
-  border: 1px solid var(--pinstripe);
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.7);
-  display: flex;
-  flex-direction: column;
-}
-
-#keys {
-  flex: 1 1 auto;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  border-bottom: 1px solid var(--pinstripe);
-}
-
-.key {
-  /* The whole column is the key: a thumb lands anywhere in it. */
-  appearance: none;
-  -webkit-appearance: none;
-  margin: 0;
-  padding: 9em 0 0;
-  gap: 8em;
-  border: 0;
-  border-right: 1px solid var(--pinstripe);
-  background: transparent;
-  color: var(--ivory);
-  font: inherit;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
+  gap: 12px;
+  min-height: 150px;
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background 90ms var(--ease), color 90ms var(--ease);
 }
-.key:last-child { border-right: 0; }
-.key:focus { outline: none; }
-.key:focus-visible .cap { outline: 2px solid var(--ivory); outline-offset: 3px; }
+.k-up { background: var(--green); }
+.k-down { background: var(--blue); border-left: var(--rule) solid var(--white); }
+.k-vol { background: var(--cyan); color: var(--ink); border-top: var(--rule) solid var(--white); }
+.k-power { background: var(--red); border-top: var(--rule) solid var(--white); border-left: var(--rule) solid var(--white); }
 
-.label {
-  font-family: var(--sans);
-  font-size: 2.5em;
-  line-height: 1.2;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  text-align: center;
-  color: var(--ivory);
-}
-.label small {
-  display: block;
-  font-size: 0.78em;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  opacity: 0.85;
-}
-
-/* The key sits in a dark well; the cap is a pillow of aged plastic. */
-.well {
-  display: block;
-  width: 14em;
-  height: 44em;
-  border-radius: 1.6em;
-  background: #0b0b0d;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.9), inset 0 -1px 0 rgba(255, 255, 255, 0.06);
-  padding: 1em;
-  box-sizing: border-box;
-}
-.cap {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border-radius: 1.2em;
-  background: linear-gradient(180deg, #ece7d8 0%, var(--ivory) 45%, var(--ivory-lo) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.8),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.25),
-    0 3px 0 rgba(0, 0, 0, 0.55);
-  transform: translateY(0);
-  transition: transform 120ms var(--ease), box-shadow 120ms var(--ease), filter 120ms var(--ease);
-}
-.key-power .cap {
-  background: linear-gradient(180deg, #f5a648 0%, var(--orange) 45%, var(--orange-lo) 100%);
-}
-.key.down .cap,
-.key:active .cap {
-  transform: translateY(3px);
-  filter: brightness(0.9);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.3),
-    0 0 0 rgba(0, 0, 0, 0.55);
-}
-/* ---------------------------------------------------------- the wordmark */
-
-#brand {
-  flex: 0 0 auto;
-  padding: 7em 0 7em;
-  text-align: center;
-  color: var(--ivory);
-}
-#wordmark {
-  font-family: var(--serif);
-  font-size: 9.5em;
+.glyph {
+  font-size: clamp(56px, 17vw, 80px);
   line-height: 1;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
-#subline {
-  margin-top: 1.2em;
-  font-family: var(--sans);
-  font-size: 3em;
-  line-height: 1.2;
-  font-weight: 500;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  opacity: 0.92;
+.label {
+  font-size: 15px;
+  letter-spacing: 3px;
 }
 
-/* ---------------------------------------------------------- around it */
+/* The volume key's glyph: four bars stepping up, the way every set drew
+   volume. It is a picture of the key, not of the level: the remote holds
+   no state and the set draws the real meter on screen. */
+.bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: clamp(44px, 13vw, 60px);
+}
+.bars i {
+  display: block;
+  width: clamp(12px, 3.6vw, 16px);
+  background: currentColor;
+}
+.bars i:nth-child(1) { height: 30%; }
+.bars i:nth-child(2) { height: 55%; }
+.bars i:nth-child(3) { height: 78%; }
+.bars i:nth-child(4) { height: 100%; }
 
+/* Pressed: the page inverts, the way the board's station bug is drawn
+   reversed. Held down by the pointer, released when it lifts. */
+.key.down,
+.key:active {
+  background: var(--white);
+  color: var(--ink);
+}
+.key:focus { outline: none; }
+.key:focus-visible { outline: 4px solid var(--white); outline-offset: -10px; }
+
+/* ---------------------------------------------------------- the crawl band */
+
+#crawl {
+  display: flex;
+  align-items: stretch;
+  background: var(--ink);
+  border-top: var(--rule) solid var(--white);
+  padding-bottom: env(safe-area-inset-bottom);
+  min-height: 58px;
+}
+#flag {
+  display: flex;
+  align-items: center;
+  background: var(--red);
+  color: var(--white);
+  padding: 0 16px;
+  font-size: 17px;
+  letter-spacing: 2px;
+  border-right: 4px solid var(--white);
+  flex: 0 0 auto;
+}
 #status {
+  flex: 1;
+  display: flex;
+  align-items: center;
   margin: 0;
-  min-height: 1.5em;
-  max-width: 34ch;
-  text-align: center;
-  color: var(--ink-dim);
+  padding: 10px 14px;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  text-transform: none;
+  font-size: 15px;
+  line-height: 1.35;
+  color: var(--white);
 }
-#status.warn { color: var(--warn); }
-
-#foot {
-  margin: 0;
-  font-size: 14px;
-  color: var(--ink-dim);
-}
-#foot a {
-  color: var(--link);
+#status.warn { color: #F0C860; }
+#room {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--white);
   text-decoration: none;
-  border-bottom: 1px solid rgba(143, 166, 255, 0.4);
+  border-left: 1px solid rgba(240, 240, 236, 0.35);
+  flex: 0 0 auto;
 }
-#foot a:hover, #foot a:focus-visible { border-bottom-color: var(--link); outline: none; }
+#room:hover, #room:focus-visible { background: var(--blue); outline: none; }
+
+/* A wide screen (a laptop trying the remote) keeps the phone's proportions
+   in the middle rather than stretching the keys across the whole window. */
+@media (min-width: 600px) {
+  body { background: var(--ink); }
+  #remote { min-height: 0; height: 100vh; max-height: 900px; margin: max(0px, calc((100vh - 900px) / 2)) auto; border-left: var(--rule) solid var(--white); border-right: var(--rule) solid var(--white); }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .cap { transition: none; }
+  .key { transition: none; }
 }
