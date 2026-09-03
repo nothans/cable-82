@@ -10,7 +10,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
-const { createApp, listenUrls, displayBuild, releaseVersion } = require("../server.js");
+const { createApp, listenUrls, parseArgs, displayBuild, releaseVersion } = require("../server.js");
 
 // ---------- upstream mock (the "internet") ----------
 
@@ -393,8 +393,7 @@ test("GET /api/cheerlights returns the normalized color when enabled", async () 
   const r = await fetch(base + "/api/cheerlights");
   assert.equal(r.status, 200);
   const j = await r.json();
-  assert.equal(j.color, "purple"); // trimmed + lowercased
-  assert.equal(j.hex, "#800080");
+  assert.deepEqual(j, { color: "purple" }); // trimmed + lowercased; the name is all the crawl uses
 });
 
 test("GET /api/cheerlights is 503 when disabled", async () => {
@@ -605,7 +604,7 @@ test("GET /api/weather returns normalized current conditions", async () => {
   const upstreamPort = upstream.address().port;
   const cfg = configFor(upstreamPort);
   cfg.weather = {
-    location: { name: "Boston, MA", latitude: 42.36, longitude: -71.06, timezone: "America/New_York", country: "United States" },
+    location: { name: "Boston, MA", latitude: 42.36, longitude: -71.06, timezone: "America/New_York" },
     tempUnit: "F",
     windUnit: "mph",
   };
@@ -619,7 +618,39 @@ test("GET /api/weather returns normalized current conditions", async () => {
   assert.equal(j.condition, "PARTLY CLOUDY"); // code 2
   assert.equal(j.tempHi, 78);
   assert.equal(j.tempLo, 61);
+  assert.equal(j.wind, 8); // 8.3 rounded, in the unit the config picked
+  assert.equal(j.windUnit, "MPH");
   assert.equal(j.sunrise, "2026-07-22T05:27");
+});
+
+test("the wind unit follows the config", async () => {
+  const upstreamPort = upstream.address().port;
+  const cfg = configFor(upstreamPort);
+  cfg.weather = { location: { latitude: 42.36, longitude: -71.06 }, tempUnit: "C", windUnit: "kmh" };
+  writeConfig(cfg, 11);
+  const j = await (await fetch(base + "/api/weather")).json();
+  assert.equal(j.windUnit, "KM/H");
+  assert.equal(j.tempUnit, "C");
+  assert.ok(upstreamState.requests.some((u) => u.includes("wind_speed_unit=kmh")), "asked upstream for km/h");
+});
+
+test("parseArgs reads every flag and refuses a flag without its value", () => {
+  const ok = parseArgs(["--port", "2000", "--media", "/mnt/nas", "--media", "D:\\library", "--chaos"]);
+  assert.equal(ok.error, null);
+  assert.equal(ok.port, 2000);
+  assert.deepEqual(ok.mediaDirs, ["/mnt/nas", "D:\\library"]);
+  assert.equal(ok.chaos, true);
+  assert.equal(ok.mock, true, "--chaos implies --mock");
+  assert.deepEqual(parseArgs([]), { mock: false, chaos: false, port: null, mediaDirs: [], error: null });
+  // A flag that needs a value and does not get one used to push undefined,
+  // which surfaced hours later as a 400 on every channels request.
+  assert.match(parseArgs(["--media"]).error, /--media needs a value/);
+  assert.match(parseArgs(["--media", "--mock"]).error, /--media needs a value/);
+  assert.match(parseArgs(["--port"]).error, /--port needs a value/);
+  assert.match(parseArgs(["--port", "abc"]).error, /--port needs a number/);
+  assert.match(parseArgs(["--port", "70000"]).error, /--port needs a number/);
+  assert.match(parseArgs(["--loud"]).error, /unknown option --loud/);
+  assert.equal(parseArgs(["--help"]).help, true);
 });
 
 test("listenUrls leads with localhost and lists every LAN IPv4 address", () => {
@@ -652,6 +683,32 @@ test("GET /api/config synthesizes the out-of-the-box dial for a legacy config", 
   assert.ok(j.config.preview.tagline.length > 0);
   assert.equal(j.config.tuner.wrap, true);
   assert.equal(j.config.tuner.cut, "static");
+});
+
+test("schema keeps overscan per axis and reads a legacy overscanPercent into both", () => {
+  const { validateConfig } = require("../config-schema.js");
+  const fresh = validateConfig({}).cfg;
+  assert.equal(fresh.overscanX, 7);
+  assert.equal(fresh.overscanY, 7);
+  assert.ok(!("overscanPercent" in fresh), "the single value is not written back");
+  const legacy = validateConfig({ overscanPercent: 10 }).cfg;
+  assert.equal(legacy.overscanX, 10);
+  assert.equal(legacy.overscanY, 10);
+  const both = validateConfig({ overscanPercent: 10, overscanX: 3 }).cfg;
+  assert.equal(both.overscanX, 3, "an explicit axis wins");
+  assert.equal(both.overscanY, 10, "the other axis takes the legacy value");
+});
+
+test("schema writes exactly the keys the README documents, nothing vestigial", () => {
+  const { validateConfig, DEFAULT_CONFIG } = require("../config-schema.js");
+  const cfg = validateConfig(DEFAULT_CONFIG).cfg;
+  assert.deepEqual(Object.keys(cfg).sort(), [
+    "channelName", "channels", "cheerlights", "colors", "crawl", "crtInkText", "crtMode", "dadJokes",
+    "dailyReloadHour", "facts", "feeds", "maxItemsPerFeed", "messages", "music", "overscanX", "overscanY",
+    "pageSeconds", "port", "preview", "refreshMinutes", "rotation", "tagline", "textScale", "timeFormat",
+    "tuner", "weather",
+  ]);
+  assert.deepEqual(Object.keys(cfg.weather.location).sort(), ["latitude", "longitude", "name", "timezone"]);
 });
 
 test("schema rejects duplicate channel numbers and sorts the dial", async () => {
@@ -756,6 +813,34 @@ test("POST /api/tune broadcasts an event with a rising sequence to SSE listeners
   // process, so a reconnect after a restart can tell a stale page to reload.
   assert.match(hello.data.build, /^[0-9a-f]{12}$/);
   assert.equal(hello.data.build, displayBuild());
+  // And the config version, so a hand edit while the stream was down is
+  // noticed on reconnect without the display polling for it.
+  const cfg = await (await fetch(base + "/api/config")).json();
+  assert.equal(hello.data.config, cfg.version);
+});
+
+test("the hello's config token moves when config.json does", async () => {
+  const upstreamPort = upstream.address().port;
+  const readHello = () =>
+    new Promise((resolve, reject) => {
+      const req = http.get(base + "/api/events", (res) => {
+        let buf = "";
+        res.on("data", (c) => {
+          buf += c;
+          const m = /event: hello\ndata: (.*)\n/.exec(buf);
+          if (m) {
+            req.destroy();
+            resolve(JSON.parse(m[1]));
+          }
+        });
+      });
+      req.on("error", reject);
+    });
+  const before = await readHello();
+  writeConfig({ ...configFor(upstreamPort), channelName: "MOVED" }, 20);
+  const after = await readHello();
+  assert.notEqual(after.config, before.config);
+  assert.equal(after.build, before.build, "the display files did not change");
 });
 
 test("the remote's volume and power keys ride the same bus", async () => {
@@ -845,13 +930,13 @@ test("a dropped range request closes its file (no leaked descriptors)", async ()
 });
 
 test("naturalCompare orders seasons and episodes like a human", () => {
-  const { naturalCompare } = require("../server.js");
+  const { naturalCompare } = require("../config-schema.js");
   const names = ["S01.E10.mp4", "S02.E1.mp4", "S01.E2.mp4", "S01.E1.mp4"];
   assert.deepEqual(names.sort(naturalCompare), ["S01.E1.mp4", "S01.E2.mp4", "S01.E10.mp4", "S02.E1.mp4"]);
 });
 
 test("naturalCompare survives mixed zero-padding (S1E2 airs before S01E10)", () => {
-  const { naturalCompare } = require("../server.js");
+  const { naturalCompare } = require("../config-schema.js");
   assert.ok(naturalCompare("S1E2.mp4", "S01E10.mp4") < 0);
   assert.deepEqual(
     ["S01E10.mp4", "S1E2.mp4", "S1E1.mp4"].sort(naturalCompare),

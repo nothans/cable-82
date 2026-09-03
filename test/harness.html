@@ -18,10 +18,17 @@
 </style>
 </head>
 <body>
-<h1>cable-82 test harness (app.js pure functions)</h1>
+<h1>cable-82 test harness (the display's pure functions)</h1>
 <ul id="results"></ul>
 <div id="summary"></div>
+<!-- The same scripts index.html loads, in the same order. app.js gathers
+     the pure helpers on window.Cable82 and does not boot without a #stage. -->
 <script src="../config-schema.js"></script>
+<script src="../dial.js"></script>
+<script src="../board.js"></script>
+<script src="../guide.js"></script>
+<script src="../video.js"></script>
+<script src="../tuner.js"></script>
 <script src="../app.js"></script>
 <script>
 (() => {
@@ -141,7 +148,6 @@
     const r = C.validateConfig({});
     ok(r.ok);
     eq(r.cfg.pageSeconds, 12);
-    eq(r.cfg.overscanPercent, 7);
     eq(r.cfg.overscanX, 7);
     eq(r.cfg.overscanY, 7);
     eq(r.cfg.crtMode, false);
@@ -152,21 +158,29 @@
   });
   t("validateConfig clamps overscan and drops bad slots", () => {
     const r = C.validateConfig({
-      overscanPercent: 40,
+      overscanX: 40,
       feeds: [{ id: "a", url: "http://x" }],
       rotation: [{ type: "headlines", feed: "missing" }, { type: "clock" }, { type: "wat" }],
     });
-    eq(r.cfg.overscanPercent, 15);
+    eq(r.cfg.overscanX, 15);
     eq(r.cfg.rotation, [{ type: "clock" }]);
     ok(r.errors.length === 2, "two warnings");
   });
-  t("per-axis overscan falls back to overscanPercent and clamps", () => {
+  t("a legacy overscanPercent seeds both axes and is not written back", () => {
     const r = C.validateConfig({ overscanPercent: 9 });
     eq(r.cfg.overscanX, 9);
     eq(r.cfg.overscanY, 9);
+    ok(!("overscanPercent" in r.cfg), "not written back");
     const r2 = C.validateConfig({ overscanPercent: 9, overscanX: 12, overscanY: 40 });
     eq(r2.cfg.overscanX, 12);
     eq(r2.cfg.overscanY, 15);
+  });
+  t("cheerlightsLine fills the color into the template, case-insensitively", () => {
+    eq(C.cheerlightsLine("THE WORLD IS SET TO {COLOR}", "purple"), "THE WORLD IS SET TO PURPLE");
+    eq(C.cheerlightsLine("now: {color}", "warmwhite"), "now: WARMWHITE");
+    eq(C.cheerlightsLine("no slot here", "red"), "no slot here");
+    eq(C.cheerlightsLine("THE WORLD IS SET TO {COLOR}", ""), "");
+    eq(C.cheerlightsLine("THE WORLD IS SET TO {COLOR}", null), "");
   });
   t("validateConfig clamps textScale and only honors a true crtMode", () => {
     eq(C.validateConfig({ textScale: 3 }).cfg.textScale, 1.5);

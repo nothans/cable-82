@@ -62,11 +62,6 @@
     position: sticky;
     top: 0;
     z-index: 5;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--sp-2);
-    padding: var(--sp-2) var(--sp-3);
     background: var(--panel);
     border-bottom: 1px solid var(--line);
   }
@@ -92,8 +87,6 @@
     text-overflow: ellipsis;
   }
   .masthead .actions { display: flex; align-items: center; gap: var(--sp-1); }
-
-  header.masthead { display: block; padding: 0; }
   .masthead-row {
     display: flex;
     flex-wrap: wrap;
@@ -283,6 +276,22 @@
 
   button.ghost { background: transparent; }
   button.small { font-size: 13px; padding: 6px 10px; }
+  /* A link dressed as a button, for the masthead's jumps to the other pages. */
+  a.button {
+    display: inline-block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    text-decoration: none;
+    background: transparent;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    padding: 6px 10px;
+    line-height: 1.2;
+    transition: background 160ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 160ms;
+  }
+  a.button:hover { background: #2b3040; }
+  a.button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
   button.icon { padding: 6px 9px; line-height: 1; }
   button.danger { color: #f0b6b0; border-color: #5a2b28; }
   button.danger:hover { background: #3a1f1d; border-color: var(--danger); }
@@ -374,7 +383,6 @@
   }
   .warnings li::before { content: "! "; }
 
-  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   /* Channels: same row language as the other lists, plus the schedule
      sub-editor and the week grid. */
   .ch-item { flex-wrap: wrap; }
@@ -397,9 +405,9 @@
   .ch-window input[type="time"] { width: 8em; }
   .day-chip {
     font: inherit; padding: 2px 7px; border-radius: 999px; cursor: pointer;
-    background: transparent; color: var(--muted); border: 1px solid #3a4258;
+    background: transparent; color: var(--ink-dim); border: 1px solid #3a4258;
   }
-  .day-chip[aria-pressed="true"] { color: var(--ink, #fff); border-color: var(--accent); background: var(--accent); }
+  .day-chip[aria-pressed="true"] { color: var(--accent-ink); border-color: var(--accent); background: var(--accent); }
   #week-grid {
     display: grid; grid-template-columns: 2.5em repeat(7, 1fr); gap: 2px;
     margin-top: 6px; font-size: 0.85em;
@@ -424,8 +432,8 @@
         <a id="version" class="version" href="https://github.com/nothans/cable-82" target="_blank" rel="noopener">&hellip;</a>
       </div>
       <div class="actions">
-        <a id="view-channel" href="/" target="_blank" rel="noopener"><button type="button" class="ghost small">View channel &#8599;</button></a>
-        <a href="/remote-control" target="_blank" rel="noopener"><button type="button" class="ghost small">Remote control &#8599;</button></a>
+        <a class="button" href="/" target="_blank" rel="noopener">View channel &#8599;</a>
+        <a class="button" href="/remote-control" target="_blank" rel="noopener">Remote control &#8599;</a>
       </div>
     </div>
     <nav class="groupnav" aria-label="Control room sections">
@@ -540,7 +548,7 @@
           <div class="field">
             <label for="f-dailyReloadHour">Daily reload hour</label>
             <select id="f-dailyReloadHour"></select>
-                      </div>
+          </div>
         </div>
       </section>
     </section>
@@ -690,7 +698,7 @@
       </section>
       <section class="panel" id="p-weather">
         <h3>Weather</h3>
-        <p class="hint">One weather strip, fed by Open-Meteo (free, no account). Search your town, pick the match, choose units. Add a Weather page to the rotation to put it on the air.</p>
+        <p class="hint">One weather strip, fed by Open-Meteo (free, no account): current conditions, the day's high and low, wind, sunrise and sunset. Search your town, pick the match, choose units. Add a Weather page to the rotation to put it on the air.</p>
         <div class="field">
           <label>Location</label>
           <div id="wxCurrent" class="wx-current"></div>

@@ -50,9 +50,9 @@
   // frame (how ws4kp joins the dial without being absorbed).
   const CHANNEL_TYPES = new Set(["bulletin", "video", "guide", "external"]);
   const OFFAIR_MODES = new Set(["testcard", "bars", "snow", "bulletin"]);
-  // The guide channel's own name, and what an unnamed channel is called.
-  const GUIDE_NAME = "CABLEVUE";
-  function DEFAULT_CHANNEL_NAME(type, number, stationName, previewName) {
+  // What an unnamed channel is called: the station for the board, the
+  // preview name for the guide, its number for anything else.
+  function defaultChannelName(type, number, stationName, previewName) {
     if (type === "bulletin") return stationName;
     if (type === "guide") return previewName || PREVIEW_DEFAULTS.name;
     return "CHANNEL " + number;
@@ -71,6 +71,29 @@
   // way a headend guide's did.
   const GUIDE = { slots: { min: 2, max: 4, dflt: 3 }, scrollSeconds: { min: 4, max: 120, dflt: 14 } };
   const PREVIEW_DEFAULTS = { name: "CABLEVUE", tagline: "WHAT'S ON, AND WHAT'S NEXT" };
+
+  // Natural sort: digit runs compare numerically, so "S01.E2" sorts before
+  // "S01.E10" and seasons order before episodes. Case-insensitive. One
+  // implementation for the server's folder listing and the display's
+  // running order, so the two can never disagree about what airs first.
+  function naturalCompare(a, b) {
+    const ax = String(a).toLowerCase().split(/(\d+)/);
+    const bx = String(b).toLowerCase().split(/(\d+)/);
+    for (let i = 0; i < Math.max(ax.length, bx.length); i++) {
+      const as = ax[i] || "";
+      const bs = bx[i] || "";
+      if (as === bs) continue;
+      const an = /^\d+$/.test(as) ? Number(as) : NaN;
+      const bn = /^\d+$/.test(bs) ? Number(bs) : NaN;
+      if (Number.isFinite(an) && Number.isFinite(bn)) {
+        if (an !== bn) return an - bn;
+        continue; // "1" vs "01": same episode number, keep comparing
+      }
+      return as < bs ? -1 : 1;
+    }
+    // Segments all tie (maybe only padding differs): raw string settles it.
+    return String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0;
+  }
 
   // "HH:MM" -> minutes since midnight, or null. Shared by validation here
   // and the air-state math in the display.
@@ -202,7 +225,6 @@
         latitude: 42.3584,
         longitude: -71.0598,
         timezone: "America/New_York",
-        country: "United States",
       },
       tempUnit: "F",
       windUnit: "mph",
@@ -235,9 +257,8 @@
       seconds: true,
       background: "blue",
     },
-    overscanPercent: 7,
-    // Per-axis overscan margins; both fall back to overscanPercent, because
-    // real tubes rarely crop the same amount on every edge.
+    // Overscan margins, one per axis, because real tubes rarely crop the
+    // same amount on every edge.
     overscanX: 7,
     overscanY: 7,
     // CRT mode: softer palette, no drop shadow. textScale enlarges the body,
@@ -287,24 +308,26 @@
 
   // Normalize text to what an 8x16 character generator can show: map
   // typographic punctuation to ASCII, drop everything outside printable
-  // Latin-1 (emoji included), collapse whitespace, cap length.
+  // Latin-1 (emoji included), collapse whitespace, cap length. Every
+  // exotic character is written as an escape: a literal one survives only
+  // until somebody's editor normalizes it.
   function sanitize(text, max = 160) {
     if (typeof text !== "string") return "";
     let t = text
-      .replace(/[‘’‚′]/g, "'")
-      .replace(/[“”„″]/g, '"')
-      .replace(/[–—―−]/g, "-")
-      .replace(/…/g, "...")
-      .replace(/[  -​ 　]/g, " ");
+      .replace(/[\u2018\u2019\u201A\u2032]/g, "'") // curly single quotes, prime
+      .replace(/[\u201C\u201D\u201E\u2033]/g, '"') // curly double quotes, double prime
+      .replace(/[\u2013\u2014\u2015\u2212]/g, "-") // en dash, em dash, horizontal bar, minus
+      .replace(/\u2026/g, "...") // ellipsis
+      .replace(/[\u00A0\u2000-\u200B\u202F\u3000]/g, " "); // nbsp, en/em spaces, zero-width, ideographic space
     t = t.replace(/\s+/g, " "); // newlines/tabs become spaces before the strip
-    t = t.replace(/[^\x20-\x7E¡-ÿ•■▪]/g, "");
+    t = t.replace(/[^\x20-\x7E\u00A1-\u00FF\u2022\u25A0\u25AA]/g, ""); // printable ASCII, Latin-1, bullet, black square, small square
     t = t.replace(/\s+/g, " ").trim(); // stripping can merge two spaces
     if (max >= 4 && t.length > max) t = t.slice(0, max - 3).trimEnd() + "...";
     return t;
   }
 
-  // A location is only usable if it has real coordinates. Everything else
-  // (name, timezone, country) is cosmetic and defaults to empty.
+  // A location is only usable if it has real coordinates. The name and
+  // timezone are cosmetic and default to empty.
   function validateWeather(raw) {
     const w = raw && typeof raw === "object" ? raw : {};
     const loc = w.location && typeof w.location === "object" ? w.location : {};
@@ -318,7 +341,6 @@
             latitude: lat,
             longitude: lon,
             timezone: typeof loc.timezone === "string" ? loc.timezone.slice(0, 60) : "auto",
-            country: typeof loc.country === "string" ? sanitize(loc.country, 60) : "",
           }
         : null,
       tempUnit: w.tempUnit === "C" ? "C" : "F",
@@ -420,7 +442,7 @@
       const ch = {
         number,
         type: c.type,
-        name: sanitize(c.name, 40) || DEFAULT_CHANNEL_NAME(c.type, number, cfg.channelName, cfg.preview && cfg.preview.name),
+        name: sanitize(c.name, 40) || defaultChannelName(c.type, number, cfg.channelName, cfg.preview && cfg.preview.name),
         enabled: c.enabled !== false,
       };
       if (c.type === "video") {
@@ -456,7 +478,7 @@
     if (!out.length) {
       // Out of the box: the guide on 0 and the board on 82, the two channels
       // a small cable system always had of its own.
-      out.push({ number: 0, name: (cfg.preview && cfg.preview.name) || GUIDE_NAME, type: "guide", enabled: true });
+      out.push({ number: 0, name: (cfg.preview && cfg.preview.name) || PREVIEW_DEFAULTS.name, type: "guide", enabled: true });
       out.push({ number: 82, name: cfg.channelName, type: "bulletin", enabled: true });
     }
     // The dial is ordered by number; the number IS the order. Sort before
@@ -499,10 +521,10 @@
 
   // ---------------------------------------------------------- validateConfig
 
-  // Takes the raw editable config (parsed JSON, or the config.js global for
-  // back-compat) and returns { ok, cfg, errors }. cfg is the clamped,
-  // sanitized runtime shape - also exactly what gets written back to
-  // config.json, so validation and persistence never drift.
+  // Takes the raw editable config (parsed config.json) and returns
+  // { ok, cfg, errors }. cfg is the clamped, sanitized runtime shape - also
+  // exactly what gets written back to config.json, so validation and
+  // persistence never drift.
   function validateConfig(raw) {
     if (!raw || typeof raw !== "object") {
       return { ok: false, errors: ["CONFIG IS MISSING OR DID NOT LOAD"] };
@@ -517,9 +539,11 @@
     cfg.pageSeconds = clampNum(raw.pageSeconds, 3, 120, 12);
     cfg.refreshMinutes = clampNum(raw.refreshMinutes, 1, 1440, 10);
     cfg.maxItemsPerFeed = Math.round(clampNum(raw.maxItemsPerFeed, 1, 100, 20));
-    cfg.overscanPercent = clampNum(raw.overscanPercent, 0, 15, 7);
-    cfg.overscanX = clampNum(raw.overscanX, 0, 15, cfg.overscanPercent);
-    cfg.overscanY = clampNum(raw.overscanY, 0, 15, cfg.overscanPercent);
+    // Overscan is per axis. A file from before the split carried one
+    // overscanPercent; it seeds both axes and is not written back.
+    const legacyOverscan = clampNum(raw.overscanPercent, 0, 15, 7);
+    cfg.overscanX = clampNum(raw.overscanX, 0, 15, legacyOverscan);
+    cfg.overscanY = clampNum(raw.overscanY, 0, 15, legacyOverscan);
     cfg.crtMode = raw.crtMode === true;
     cfg.crtInkText = raw.crtInkText === true;
     cfg.textScale = clampNum(raw.textScale, 1, 1.5, 1);
@@ -621,17 +645,14 @@
   return {
     PALETTE,
     PALETTE_CRT,
-    TEXT_ON,
-    TYPES,
-    CHANNEL_TYPES,
-    OFFAIR_MODES,
-    CHANNEL_ORDERS,
     DAY_KEYS,
     DEFAULT_CONFIG,
+    PREVIEW_DEFAULTS,
     clampNum,
     resolveColor,
     textColorFor,
     sanitize,
+    naturalCompare,
     weatherText,
     parseHM,
     FOLDER_RE,

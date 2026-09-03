@@ -100,7 +100,15 @@
     <div id="crt-line"></div>
   </div>
 </div>
+<!-- One file per part of the set, in dependency order, no build step:
+     the schema, the broadcast clock, channel 82, channel 0, the player, the
+     dial, and the boot that wires them up. -->
 <script src="config-schema.js"></script>
+<script src="dial.js"></script>
+<script src="board.js"></script>
+<script src="guide.js"></script>
+<script src="video.js"></script>
+<script src="tuner.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

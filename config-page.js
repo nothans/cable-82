@@ -26,7 +26,7 @@
   let pageCycle = [];
   let channels = []; // the dial, edited row by row like the lists above
   let channelFolders = []; // [{folder, files, seconds, probed}] from /api/channels
-  let wxLocation = null; // { name, latitude, longitude, timezone, country } or null
+  let wxLocation = null; // { name, latitude, longitude, timezone } or null
   let bootVersion = null;
 
   const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
@@ -496,8 +496,8 @@
     $("f-pageSeconds").value = cfg.pageSeconds;
     $("f-refreshMinutes").value = cfg.refreshMinutes;
     $("f-maxItemsPerFeed").value = cfg.maxItemsPerFeed;
-    $("f-overscanX").value = cfg.overscanX != null ? cfg.overscanX : cfg.overscanPercent;
-    $("f-overscanY").value = cfg.overscanY != null ? cfg.overscanY : cfg.overscanPercent;
+    $("f-overscanX").value = cfg.overscanX;
+    $("f-overscanY").value = cfg.overscanY;
     $("f-crtMode").checked = cfg.crtMode === true;
     $("f-crtInkText").checked = cfg.crtInkText === true;
     $("f-textScale").value = cfg.textScale != null ? cfg.textScale : 1;
@@ -510,10 +510,10 @@
 
     const colors = cfg.colors || {};
     const prev = cfg.preview || {};
-    $("f-previewName").value = prev.name || "CABLEVUE";
+    $("f-previewName").value = prev.name || S.PREVIEW_DEFAULTS.name;
     $("f-previewTagline").value = prev.tagline === undefined ? "" : prev.tagline;
-    $("f-previewSlots").value = prev.slots != null ? prev.slots : 3;
-    $("f-previewScroll").value = prev.scrollSeconds != null ? prev.scrollSeconds : 14;
+    $("f-previewSlots").value = prev.slots != null ? prev.slots : S.GUIDE.slots.dflt;
+    $("f-previewScroll").value = prev.scrollSeconds != null ? prev.scrollSeconds : S.GUIDE.scrollSeconds.dflt;
     $("f-previewSeconds").checked = prev.seconds !== false;
     fillColorSelect("f-previewBg", prev.background || "blue");
     fillColorSelect("f-headerBg", colors.headerBg || "blue");
@@ -526,7 +526,7 @@
     const weather = cfg.weather || {};
     const wloc = weather.location;
     wxLocation = wloc && Number.isFinite(wloc.latitude)
-      ? { name: wloc.name || "", latitude: wloc.latitude, longitude: wloc.longitude, timezone: wloc.timezone || "auto", country: wloc.country || "" }
+      ? { name: wloc.name || "", latitude: wloc.latitude, longitude: wloc.longitude, timezone: wloc.timezone || "auto" }
       : null;
     $("f-tempUnit").value = weather.tempUnit === "C" ? "C" : "F";
     $("f-windUnit").value = weather.windUnit === "kmh" ? "kmh" : "mph";
@@ -602,7 +602,6 @@
       latitude: r.latitude,
       longitude: r.longitude,
       timezone: r.timezone || "auto",
-      country: r.country || "",
     };
     $("f-wxTimezone").value = wxLocation.timezone;
     $("wxResults").innerHTML = "";
@@ -752,7 +751,6 @@
               latitude: wxLocation.latitude,
               longitude: wxLocation.longitude,
               timezone: $("f-wxTimezone").value.trim() || "auto",
-              country: wxLocation.country,
             }
           : null,
         tempUnit: $("f-tempUnit").value,
@@ -771,8 +769,8 @@
       preview: {
         name: $("f-previewName").value.trim(),
         tagline: $("f-previewTagline").value.trim(),
-        slots: Math.round(S.clampNum($("f-previewSlots").value, 2, 4, 3)),
-        scrollSeconds: Math.round(S.clampNum($("f-previewScroll").value, 4, 120, 14)),
+        slots: numVal("f-previewSlots"),
+        scrollSeconds: numVal("f-previewScroll"),
         seconds: $("f-previewSeconds").checked,
         background: $("f-previewBg").value,
       },
@@ -837,7 +835,7 @@
       fill(j.config); // reflect the canonical, cleaned-up config
       const cleaned = [];
       if (j.warnings && j.warnings.length) cleaned.push.apply(cleaned, j.warnings);
-      setStatus("Saved. The channel updates within about 20 seconds.", cleaned.length ? "warn" : "ok");
+      setStatus("Saved. The display picks it up now.", cleaned.length ? "warn" : "ok");
       showWarnings(cleaned);
       btn.disabled = false;
     } catch (e) {

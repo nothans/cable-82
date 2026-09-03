@@ -55,8 +55,9 @@ Open the first one in a browser on the same machine, or the second one from a la
 You are on the air.
 (If it prints something else instead, it is telling you why it could not start; see [Troubleshooting](#troubleshooting).)
 
-Out of the box the dial carries one channel: the Community Bulletin Board on 82.
+Out of the box the dial carries two channels: CABLEVUE, the guide, on 0, and the Community Bulletin Board on 82.
 Everything from here - more channels, your name, your messages, your feeds - happens in the control room.
+`node server.js --help` lists the few flags there are; they are in the [command line](#command-line) table below.
 
 ## The control room
 
@@ -69,7 +70,7 @@ Open `http://localhost:1982/config` and the whole network is on one screen, in t
 5. **Community Board** - everything on channel 82: its name and tagline, the page rotation, messages, facts and jokes, weather, feeds, the crawl, CheerLights, music, colors.
 
 The bar under the masthead jumps between the five groups and follows you as you scroll, and `#server`, `#display`, `#channels`, `#preview`, and `#board` are links you can bookmark.
-It is one page with one Save, so a change anywhere goes out in the same click, on the air in about twenty seconds, no reload.
+It is one page with one Save, so a change anywhere goes out in the same click: the server tells every display at once and the set reloads itself onto the new settings, on the same channel.
 The masthead also carries the release you are running, linked to its notes, and links to the display and the remote.
 
 ![The CABLE 82 control room at /config: the Server and Display groups, with the section bar and the release version in the masthead](images/config.png)
@@ -108,7 +109,8 @@ The control room draws the week as a grid so you can see the schedule at a glanc
 
 A library does not have to fit on the card the system boots from.
 Put a `channels` folder at the top of a USB drive, a spinning disk, or a mounted network share, drop your folders inside it, and they appear in the picker alongside the built-in ones.
-The drive is found wherever the machine mounts it (`/media`, `/mnt`, `/Volumes`), and `node server.js --media /path/to/library` names one that lives anywhere else.
+The drive is found wherever the machine mounts it (`/media`, `/mnt`, `/Volumes`), and `node server.js --media /path/to/library` names one that lives anywhere else, a network share included.
+On a Pi running the service, that flag goes on the unit's `ExecStart` line (see [Run the server on boot](#2-run-the-server-on-boot)).
 
 A drive only counts if it carries a `channels` folder, so plugging in a disk full of photos and tax returns does not offer them as channels.
 Folder names stay plain names, so a channel is written the same way wherever its files live, and if the same name exists in two places the built-in folder wins.
@@ -144,18 +146,48 @@ Then the high voltage drops, the line pulls in to a dot, and the phosphor keeps 
 On is the same in reverse and quicker: a dot, a line, and the picture blooms open.
 Set `tuner.power` to `black` in the control room if you want a flat panel instead, gone the moment you press it.
 
-### Tuner API
+### The tuner bus
 
-The server also offers `GET /api/channels`, the folder inventory.
-For anyone building their own tuner source or listener (the bus carries events, not state, so a remote never fights the buttons):
+For anyone building their own tuner source or listener: the bus carries events, not state, so a remote never fights the buttons.
 
 - `POST /api/tune` takes `{"cmd":"up"}`, `{"cmd":"down"}`, `{"cmd":"set","channel":N}` (0 to 999), `{"cmd":"volume"}` (one step around the volume cycle), or `{"cmd":"power"}` (toggle the picture off and on) and answers `{"ok":true,"seq":N,"listeners":N}`. Volume and power are events too: the display holds the level and the on/off state, not the server.
 - `GET /api/tune` answers `{"seq":N,"last":{...},"listeners":N}` - the last command and how many displays are listening, useful for checking a remote is wired up. It never reports a current channel, because the server doesn't hold one.
-- `GET /api/events` emits `hello` (`{"seq":N,"build":"..."}`, your baseline on connect and reconnect; `build` is a hash of the display files, and a display that reconnects to a different one reloads), `tune` (a command with its `seq` - apply each seq once), and `config` (`{"version":...}` after a control-room save - the display reloads on it).
+- `GET /api/events` is the stream the display listens to. It opens with `hello` (`{"seq":N,"build":"...","config":"..."}`: the baseline on connect and reconnect, where `build` is a hash of the display files and `config` is the version of `config.json`; a display that reconnects and finds either one changed reloads itself), then carries `tune` (a command with its `seq`; apply each seq once) and `config` (`{"version":...}` after a control-room save; the display reloads on it).
 - Both tune endpoints answer 403 while HTTP tuning is switched off in the control room.
-- `GET /api/system` answers `{"model":"Raspberry Pi 3 Model B Plus Rev 1.3","pi":true,"power":true}`. `POST /api/system` with `{"cmd":"restart"}` or `{"cmd":"shutdown"}` stops the station, flushes the disks, and hands over to systemd. It needs the same `x-cable82-config: 1` header a config save does, and it answers 403 unless the machine is a Pi whose user can power it without a password.
-- `GET /api/version` answers `{"version":"v0.4.0","release":"v0.4.0","build":"...","repo":"..."}` - what release this install is running, read from the checkout once at startup. `release` is set only when the checkout sits exactly on a tag; both are `null` for a zip download or a copy vendored inside another repo, rather than a guessed version.
-- `POST /api/channels/durations` is internal - the display reporting probed video durations back to the server's cache. It requires the same `x-cable82-config: 1` header as config saves.
+
+### API
+
+Everything the display, the control room, and the remote talk to, in one place.
+The server has no authentication: it is built for the LAN a living room sits on, and nothing here should be exposed to the internet.
+
+| Endpoint | What it does |
+| --- | --- |
+| `GET /api/config` | The current config and a version token: `{"version":"...","config":{...}}` |
+| `POST /api/config` | Validate and write `config.json`. Needs the header `x-cable82-config: 1` (a browser will not attach it cross-site, so a page you happen to be visiting cannot rewrite the channel). Send `x-cable82-config-version` with the token you loaded and a stale save is refused with 409 instead of overwriting a newer file. Answers the cleaned config plus any warnings |
+| `GET /api/channels` | Every channel folder for the picker (`folders`, with file counts, probed run time, and which drive each sits on) plus the playlist of every configured video channel (`channels`, files with cached durations, and the spots of a channel with breaks) |
+| `POST /api/channels/durations` | Internal: the display reporting probed video durations back to the server's `.durations.json` cache. Same header as a config save |
+| `GET /api/tune`, `POST /api/tune`, `GET /api/events` | The tuner bus, above |
+| `GET /api/feed/<id>` | A configured RSS or Atom feed, fetched server-side. Only ids in `config.json` exist; the URL never crosses the wire. The last good copy is served (with `x-cable82-stale: 1`) when the source is down |
+| `GET /api/weather` | Current conditions for the configured location from Open-Meteo: temperature, condition, high and low, wind, sunrise and sunset, in the configured units. Last good copy on a blip; 503 until a location is set |
+| `GET /api/geocode?q=<place>` | Up to five matches for a place name, for the control room's location search |
+| `GET /api/cheerlights` | The latest [CheerLights](https://cheerlights.com) color name; 503 while CheerLights is switched off |
+| `GET /api/music` | The audio files in `music/`, in order |
+| `GET /api/version` | `{"version":"v1.0.0","release":"v1.0.0","build":"...","repo":"..."}`: what release this install is running, read from the checkout once at startup. `release` is set only when the checkout sits exactly on a tag; both are `null` for a zip download or a copy vendored inside another repo, rather than a guessed version |
+| `GET /api/system` | `{"model":"Raspberry Pi 3 Model B Plus Rev 1.3","pi":true,"power":true}`: what the machine is and whether it can be powered from the control room |
+| `POST /api/system` | `{"cmd":"restart"}` or `{"cmd":"shutdown"}`: stop the station, flush the disks, hand over to systemd. Same header as a config save; 403 unless the machine is a Pi whose user can run `sudo` without a password. Anyone on your network who can reach the control room can press these, the same as they can change the channel |
+
+Static files are served from the checkout, with HTTP Range support (how `<video>` seeks), and `channels/<folder>/<file>` resolves through every drive that carries a channels folder.
+Dotfiles and anything above the checkout are never served.
+
+### Command line
+
+| Flag | What it does |
+| --- | --- |
+| `--port <n>` | Listen on port `n` instead of the `port` in `config.json` |
+| `--media <path>` | Also look for channel folders under `<path>/channels` (or `<path>` itself). Repeatable |
+| `--mock` | Serve the canned feeds in `test/mock-feeds/` instead of fetching anything |
+| `--chaos` | Mock feeds that randomly hang and fail, for watching the board shrug it off. Implies `--mock` |
+| `--help` | The same list, from the server itself |
 
 ## Channel 82: the Community Bulletin Board
 
@@ -167,7 +199,7 @@ Every cable system had one, somewhere on the dial: the community channel. This i
 2. **Pages** - full-screen colored pages that hard-cut every 12 seconds: a big clock, your community messages, DID YOU KNOW facts, DAD JOKE groaners, a WEATHER card, and headlines.
 3. **The crawl** - a continuous ticker of headlines along the bottom, fed by RSS.
 
-The WEATHER card is fed by Open-Meteo (free, no account): current conditions, hi/lo, and sunrise/sunset for a location you pick in the control room.
+The WEATHER card is fed by Open-Meteo (free, no account): current conditions, hi/lo, wind, and sunrise/sunset for a location you pick in the control room, in the units you pick there.
 (For a full weather *channel*, put [ws4kp](https://github.com/netbymatt/ws4kp) on the dial as an external channel.)
 
 | The time | The weather | A dad joke |
@@ -222,8 +254,7 @@ Everything the control room edits lives in `config.json`, and you can hand-edit 
 | `music` | Background music from the `music/` folder: `enabled`, `shuffle`, `volume` (0-100) | on, shuffled, 60 |
 | `cheerlights` | The latest [CheerLights](https://cheerlights.com) color as a crawl item: `enabled`, `template` (`{color}` becomes the color name) | on, `THE WORLD IS SET TO {COLOR}` |
 | `colors` | `pageCycle`, `headerBg`, `crawlBg` | period palette |
-| `overscanPercent` | Safe margin for CRT overscan, 0-15; the fallback for both axes | `7` |
-| `overscanX`, `overscanY` | Per-axis overscan margins, 0-15; tubes rarely crop evenly | `overscanPercent` |
+| `overscanX`, `overscanY` | Overscan safe margins in percent, sides and top/bottom, 0-15; tubes rarely crop evenly. (A file from an earlier release with one `overscanPercent` seeds both) | `7`, `7` |
 | `crtMode` | Softer NTSC-safe palette and no drop shadow, for composite or RF | `false` |
 | `crtInkText` | Dark text on color pages while CRT mode is on; white smears on some tubes | `false` |
 | `textScale` | Enlarges body, kicker, crawl, and small header text, 1-1.5 | `1` |
@@ -291,12 +322,15 @@ WantedBy=multi-user.target
 
 Replace `pi` (both places) with your own username if it differs: `whoami` tells you, and newer Raspberry Pi OS images let you pick any name at setup.
 `which node` confirms the path on the `ExecStart` line.
+A library on a network share goes on that line too: `ExecStart=/usr/bin/node /home/pi/cable-82/server.js --media /mnt/library`.
+A USB drive needs nothing; it is found where the desktop mounts it.
 Then `sudo systemctl enable --now cable82`, and `systemctl status cable82` should say `active (running)` with the broadcasting lines in its log.
 When a new release comes out, see [Updating](#updating): one line, and the TV takes care of itself.
 
 Once the service is running, the control room's **Server** group grows a **Power** panel with Restart and Shut down.
 Both stop the station and flush the disks before handing over to systemd, which is the part that keeps a memory card intact, and each button asks twice before it does anything.
 They only appear on a Raspberry Pi whose user can run `sudo` without a password, which is the default on Raspberry Pi OS; anywhere else the panel stays hidden.
+Like the tune API, they are open to anyone on your network who can reach the control room, so keep the Pi on a LAN you trust.
 Shutting down still leaves the Pi powered: wait for the green light to stop blinking, then pull the plug.
 
 ### 3. Chromium in kiosk mode
@@ -409,7 +443,7 @@ Open the **Picture** panel, under Display, in the control room:
 - **Dark text on color pages** trades the white page text for ink; white smears on some tubes, and the only way to know yours is to flip it and look.
 - **Overscan margins**, now one per axis: tubes rarely crop evenly, so give the sides and the top/bottom each what your set eats.
 
-Pages fit themselves to whatever is left: a long fact or the weather card shrinks just enough, and the weather card gives up its sunrise line first.
+Pages fit themselves to whatever is left: a long fact or the weather card shrinks a little, and only if that is not enough does the weather card give up its sunrise line and shrink further.
 There are no fake scanline filters in CABLE 82: the CRT is the filter.
 
 ## Updating
@@ -478,11 +512,30 @@ The clock, messages, facts, and jokes never need the network; the rest is fetche
 **The systemd service will not start**: `systemctl status cable82` shows why.
 The usual suspects are `User=` naming an account that does not exist, `ExecStart=` pointing at a `node` that is not at `/usr/bin/node` (`which node`), or the repo living somewhere other than `/home/pi/cable-82`.
 
+## How it is put together
+
+No build step, no dependencies: the files are what the browser runs.
+
+| File | What it is |
+| --- | --- |
+| `server.js` | The station: static files with Range serving, the feed and weather proxies, the config API, the channels inventory across drives, the tuner bus, restart and shutdown |
+| `config-schema.js` | The one validation authority, shared by the server, the display, the control room, and the tests. The palette, the sanitizer, and the natural sort live here so nothing has two copies |
+| `dial.js` | The broadcast clock, pure: where a channel is at a given moment, the schedule windows, the timeline of a channel with breaks, the guide grid, the volume steps. Loads in Node and in the browser |
+| `board.js` | Channel 82: the header, the pages, the crawl, the feeds, the weather card, CheerLights, the music bed, and its own watchdog |
+| `guide.js` | Channel 0: the CABLEVUE masthead and grid, crawling when the lineup is tall |
+| `video.js` | The player: two buffers, the cut at a boundary, the end-of-program watch, the duration probe |
+| `tuner.js` | The dial: channel changes and what covers them, the off-air cards, the volume and power keys, the keyboard and gamepad, and one `command()` every source lands on |
+| `app.js` | Boot: load the config, paint the stage, start the tuner, listen to the bus, reload daily |
+| `index.html`, `style.css` | The set. Everything is sized off a virtual 640x480 screen so it scales to any tube |
+| `config.html`, `config-page.js` | The control room |
+| `remote-control.html`, `remote-control.js`, `remote-control.css` | The Space Command |
+
 ## Testing
 
-- Server: `node --test test/server.test.mjs` - config validation (commercial breaks and the preview channel included), feeds, the channels API, the version endpoint, the tuner bus (the remote's keys included), and Range serving.
-- Client pure functions: start the server and open `http://localhost:1982/test/harness.html` - the broadcast clock, schedules (overnight windows included), playlist order, the timeline of a channel with breaks cut in, the guide grid, the dial, and the volume cycle.
-- Tuner drill: with more than one channel on the dial, `curl -X POST http://localhost:1982/api/tune -H "content-type: application/json" -d "{\"cmd\":\"up\"}"` and watch the display change channels - the whole bus in one command.
+- `node --test test/server.test.mjs test/dial.test.mjs` runs the two Node suites: the server (static serving and traversal, the feed proxy, the config API and its guards, weather and geocoding, the channels inventory across drives, durations, the tuner bus, the version and power endpoints, the command line) and the broadcast clock (positions, schedules with overnight windows, the timeline with breaks, the guide grid, the dial, the volume cycle).
+- Browser helpers: start the server and open `http://localhost:1982/test/harness.html` for the same dial math in a browser plus the DOM-bound helpers (feed parsing, sanitizing, the crawl text, the clock faces).
+- End to end: `node test/e2e.mjs` puts the real display in a headless Chromium on a throwaway config and drives it the way a living room does: signs on to the guide, tunes the board, plays a video channel through a file boundary, lands on a test card, presses volume and power, turns the dial from the keyboard, saves from the control room and watches the set reload itself, and asks the remote how many sets are listening. It needs Playwright (not a dependency of the station: `npm i playwright && npx playwright install chromium` in a scratch folder, then run with `NODE_PATH=<that>/node_modules`) and ffmpeg for its two test clips (`FFMPEG=<path>` if it is not on the PATH). Without Playwright it says so and exits clean.
+- Tuner drill by hand: with more than one channel on the dial, `curl -X POST http://localhost:1982/api/tune -H "content-type: application/json" -d "{\"cmd\":\"up\"}"` and watch the display change channels - the whole bus in one command.
 - Failure drill: `node server.js --chaos` serves mock feeds that randomly hang and fail, so you can watch the Community Board shrug it off.
 - Soak: open `http://localhost:1982/?soak=1` for accelerated channel-82 page flips and refreshes with stats logged to the console.
 

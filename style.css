@@ -11,15 +11,11 @@
   font-display: block;
 }
 
+/* The palette (--c-blue, --c-cyan, --c-green, --c-yellow, --c-red,
+   --c-magenta, --c-white, --c-ink) is set on #stage by app.js from the one
+   copy in config-schema.js, CRT variant included. This file never carries
+   a hex value that has to match one there. */
 :root {
-  --c-blue: #2038C8;
-  --c-cyan: #20A8B8;
-  --c-green: #18A038;
-  --c-yellow: #C8A020;
-  --c-red: #C03028;
-  --c-magenta: #B03898;
-  --c-white: #F0F0EC;
-  --c-ink: #101018;
   --letterbox: #0A0A12;
 }
 
@@ -52,10 +48,11 @@ html, body { height: 100%; background: var(--letterbox); }
   /* Text scale from config (1-1.5): body, kicker, crawl, and the small header
      lines grow; the big clock and temperature already fill their space. */
   --ts: 1;
-  /* Overscan safe margins. --ovp is set from config (percent, 0-15). */
-  --ovp: 7;
-  --ovx: calc(var(--u) * 640 * var(--ovpx, var(--ovp)) / 100);
-  --ovy: calc(var(--u) * 480 * var(--ovpy, var(--ovp)) / 100);
+  /* Overscan safe margins, one per axis, set from config (percent, 0-15). */
+  --ovpx: 7;
+  --ovpy: 7;
+  --ovx: calc(var(--u) * 640 * var(--ovpx) / 100);
+  --ovy: calc(var(--u) * 480 * var(--ovpy) / 100);
   /* Hard offset drop shadow, the way character generators did it: solid,
      no blur, down-and-right. --shadow can be overridden from config. */
   --shadow: rgba(8, 8, 16, 0.7);
@@ -66,18 +63,10 @@ html, body { height: 100%; background: var(--letterbox); }
 }
 
 /* CRT mode (config crtMode): the composite / RF path smears saturated color,
-   clips pure white, and turns a hard 2-unit shadow into ringing. Softer
-   palette, 90% white, no shadow. app.js sets the class and passes the same
-   palette to the page colors. */
+   clips pure white, and turns a hard 2-unit shadow into ringing. app.js
+   swaps in the softer palette (90% white) and sets the class; the class
+   drops the shadow. */
 #stage.crt {
-  --c-blue: #2C48A0;
-  --c-cyan: #3098A4;
-  --c-green: #2C8C48;
-  --c-yellow: #B09030;
-  --c-red: #A84038;
-  --c-magenta: #9C4890;
-  --c-white: #E4E4E0;
-  --c-ink: #181820;
   --shadow: transparent;
 }
 
@@ -177,19 +166,22 @@ html, body { height: 100%; background: var(--letterbox); }
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: calc(var(--u) * 10 * var(--fit, 1));
+  gap: calc(var(--u) * 8 * var(--fit, 1));
 }
+/* Six lines have to share a 480-line screen with the kicker: the card sits
+   a little closer to it than a text page does. */
+#page.mode-weather { gap: calc(var(--u) * 14); }
 #page.mode-weather #page-body,
 #page.mode-weather #page-time,
 #page.mode-weather #page-date { display: none; }
 
 #wx-location { font-size: calc(var(--u) * 28 * var(--ts) * var(--fit, 1)); line-height: 1; }
-#wx-temp { font-size: calc(var(--u) * 92 * var(--fit, 1)); line-height: 1; }
+#wx-temp { font-size: calc(var(--u) * 84 * var(--fit, 1)); line-height: 1; }
 #wx-cond { font-size: calc(var(--u) * 32 * var(--ts) * var(--fit, 1)); line-height: 1; }
 #wx-hilo { font-size: calc(var(--u) * 26 * var(--ts) * var(--fit, 1)); line-height: 1; }
 #wx-sun { font-size: calc(var(--u) * 18 * var(--ts) * var(--fit, 1)); line-height: 1; margin-top: calc(var(--u) * 4); }
 #wx-sun:empty { display: none; }
-/* Set by app.js fitPage() when the page would overflow: the sun line goes first. */
+/* Set by board.js fitPage() when the page would overflow: the sun line goes first. */
 #page.tight #wx-sun { display: none; }
 
 /* ---- Crawl band ---- */
@@ -442,7 +434,7 @@ html, body { height: 100%; background: var(--letterbox); }
   position: fixed;
   inset: 0;
   z-index: 70;
-  background: #000;
+  background: #060609; /* a dead tube is very dark grey, not a hole */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -453,14 +445,23 @@ html, body { height: 100%; background: var(--letterbox); }
    the picture folds into one bright line while the beam still sweeps side to
    side; then the high voltage drops, the line pulls in to a dot, and the
    phosphor keeps glowing for a moment after the beam is gone. Each class is
-   one step of that, driven from app.js so the timings stay in one table. */
+   one step of that, driven from tuner.js so the timings stay in one table. */
 #crt-line {
+  position: relative;
   width: min(100vw, calc(100vh * 4 / 3));
   height: max(2px, 0.45vh);
   background: #fff;
-  box-shadow: 0 0 max(6px, 1vh) rgba(255, 255, 255, 0.45);
   opacity: 0;
   transform: scaleX(1);
+}
+/* The bloom: phosphor lights up around the beam, so the line carries a
+   blurred copy of itself. It scales with the line, so the dot blooms too. */
+#crt-line::after {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * max(4px, 0.7vh)) 0;
+  background: rgba(255, 255, 255, 0.45);
+  filter: blur(max(4px, 0.7vh));
 }
 #crt-line.line { opacity: 1; }
 /* The beam pulls in to a point. The glow is a box-shadow and transforms
