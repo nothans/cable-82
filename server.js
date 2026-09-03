@@ -1104,7 +1104,7 @@ function createApp(opts = {}) {
       seen.add(key);
       disks.push({ label, path: dir, totalBytes: space.totalBytes, freeBytes: space.freeBytes });
     };
-    addDisk(ROOT, "the card");
+    addDisk(ROOT, IS_PI ? "the card" : "the checkout");
     for (const root of channelRoots()) if (root.volume) addDisk(root.dir, root.volume);
     const out = {
       host: { name: os.hostname(), model: HOST_MODEL, pi: IS_PI, platform: process.platform, arch: process.arch, node: process.versions.node },

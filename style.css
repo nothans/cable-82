@@ -365,7 +365,7 @@ html, body { height: 100%; background: var(--letterbox); }
 #guide-cols,
 .guide-row {
   display: grid;
-  grid-template-columns: calc(var(--u) * 172) repeat(var(--slots, 3), 1fr);
+  grid-template-columns: calc(var(--u) * 190) repeat(var(--slots, 3), 1fr);
   gap: calc(var(--u) * 3);
 }
 #guide-cols {

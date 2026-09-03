@@ -955,7 +955,8 @@
       const usedPct = Math.round(((v.swap.totalBytes - v.swap.freeBytes) / v.swap.totalBytes) * 100);
       host.appendChild(vital("Swap", usedPct + "% used", GB(v.swap.freeBytes) + " free of " + GB(v.swap.totalBytes), usedPct > 50 ? "warn" : ""));
     }
-    host.appendChild(vital("Load", v.load.join("  "), v.cpu.count + " cores, 1 / 5 / 15 min", v.load[0] > v.cpu.count ? "warn" : ""));
+    // Windows has no load average; Node reports zeros there, which would read as a claim.
+    if (v.host.platform !== "win32") host.appendChild(vital("Load", v.load.join("  "), v.cpu.count + " cores, 1 / 5 / 15 min", v.load[0] > v.cpu.count ? "warn" : ""));
     if (v.cpu.temperatureC != null) {
       host.appendChild(vital("CPU", v.cpu.temperatureC + " °C", v.cpu.temperatureC >= 80 ? "throttling starts at 80" : "", v.cpu.temperatureC >= 80 ? "bad" : v.cpu.temperatureC >= 70 ? "warn" : ""));
     }
