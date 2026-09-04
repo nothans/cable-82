@@ -137,7 +137,7 @@ Pull the drive and its channels go off the air with a test card, the same as a f
 
 - **Keyboard** - arrows or PageUp/PageDown to change channel, digits plus Enter to jump straight to a number.
 - **Gamepad** - a USB NES-style controller: up/down on the pad changes channel, Select jumps home to the board.
-- **Remote control** - open `/remote-control` on a phone. It is a page of the board in your hand: four keys, channel up, channel down, volume, power, and the crawl band telling you whether a set is listening. The volume key steps loud, sound off, soft, medium, back to loud, like a 1960s motorized control. Power darkens the set the way a tube goes dark, and the broadcast clock keeps running, so on comes back to the program already in progress. The set remembers its volume and power state across a reload.
+- **Remote control** - open `/remote-control` on a phone. It is a page of the board in your hand: four keys, channel up, channel down, volume, power, and the crawl band telling you whether a set is listening. The volume key steps loud, sound off, soft, medium, back to loud, like a 1960s motorized control. Power darkens the set the way a tube goes dark, and the broadcast clock keeps running, so on comes back to the program already in progress. The set remembers its volume and power state across a reload. Put it on the home screen and it opens like an app, with the 82 as its icon: on an iPhone, Share, then Add to Home Screen; on Android, the browser menu's Add to Home screen, or the INSTALL key in the crawl band when the browser offers it. (Browsers only install a web app from a secure origin, and the station serves plain HTTP on your network, so Android makes a shortcut that opens in the browser; the iPhone version is the full-screen one.)
 - **HTTP** - `POST /api/tune` with `{"cmd":"up"}`, `{"cmd":"down"}`, `{"cmd":"set","channel":2}`, `{"cmd":"volume"}`, or `{"cmd":"power"}`. GPIO buttons, a Stream Deck, or anything that can make a request becomes a remote control. The whole bus is in [the API reference](docs/api.md#the-tuner-bus).
 
 ![The remote control at /remote-control on a phone: the CABLE 82 header band, four color keys, and the crawl band as the status line](images/remote-control.png)
@@ -516,6 +516,7 @@ No build step, no dependencies: the files are what the browser runs.
 | `index.html`, `style.css` | The set. Everything is sized off a virtual 640x480 screen so it scales to any tube |
 | `config.html`, `config-page.js` | The control room |
 | `remote-control.html`, `remote-control.js`, `remote-control.css` | The remote |
+| `remote-control.webmanifest`, `remote-sw.js`, `favicon.svg`, `icon-*.png`, `icon-maskable.svg` | What lets a phone install the remote: the manifest, a service worker scoped to the remote alone, and the 82 icon (the PNGs rasterized from the SVG at whole pixels) |
 | `docs/` | [The API](docs/api.md) and [the configuration file](docs/config.md) |
 
 ## Testing

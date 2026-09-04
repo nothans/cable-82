@@ -162,6 +162,40 @@ test("serves the remote at /remote-control", async () => {
   for (const cmd of ["down", "volume", "power", "up"]) assert.match(html, new RegExp('data-cmd="' + cmd + '"'));
 });
 
+test("the remote is installable: a manifest, icons drawn from the one SVG, a worker on its own scope", async () => {
+  const r = await fetch(base + "/remote-control.webmanifest");
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get("content-type"), /application\/manifest\+json/);
+  const m = await r.json();
+  assert.equal(m.display, "standalone");
+  assert.equal(m.start_url, "remote-control");
+  assert.equal(m.scope, "remote-control"); // never the display or the control room
+  assert.ok(m.icons.some((i) => i.src === "favicon.svg" && i.type === "image/svg+xml"), "the SVG is the icon");
+  assert.ok(m.icons.some((i) => i.purpose === "maskable"), "an adaptive-icon variant");
+  for (const i of m.icons) {
+    const ir = await fetch(base + "/" + i.src);
+    assert.equal(ir.status, 200, i.src);
+    assert.equal(ir.headers.get("content-type"), i.type, i.src);
+    if (i.type === "image/png") {
+      // The PNG header agrees with the size the manifest claims.
+      const b = Buffer.from(await ir.arrayBuffer());
+      assert.equal(b.readUInt32BE(16) + "x" + b.readUInt32BE(20), i.sizes, i.src);
+    }
+  }
+  const html = await (await fetch(base + "/remote-control")).text();
+  assert.match(html, /<link rel="manifest" href="remote-control.webmanifest">/);
+  assert.match(html, /apple-mobile-web-app-capable/);
+  assert.match(html, /id="install" hidden/); // offered only when the browser says it can
+  const js = await (await fetch(base + "/remote-control.js")).text();
+  assert.match(js, /register\("remote-sw.js", \{ scope: "remote-control" \}\)/);
+  const sw = await fetch(base + "/remote-sw.js");
+  assert.equal(sw.status, 200);
+  assert.match(sw.headers.get("content-type"), /javascript/);
+  const swText = await sw.text();
+  assert.match(swText, /startsWith\("\/api\/"\)\) return/); // the tuner bus is never cached
+  assert.doesNotMatch(swText, /index\.html|config\.html|app\.js/); // the display is not its business
+});
+
 test("serves css with the right mime type", async () => {
   const r = await fetch(base + "/style.css");
   assert.equal(r.status, 200);

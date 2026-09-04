@@ -1,0 +1,19 @@
+{
+  "id": "remote-control",
+  "name": "CABLE 82 Remote Control",
+  "short_name": "CABLE 82",
+  "description": "Channel up, channel down, volume, power: the remote for your own cable network.",
+  "start_url": "remote-control",
+  "scope": "remote-control",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#2038C8",
+  "theme_color": "#2038C8",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

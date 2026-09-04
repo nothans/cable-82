@@ -82,5 +82,33 @@
     b.addEventListener("click", (e) => e.preventDefault());
   }
 
+  // On the home screen. The browser says when it can install the remote
+  // (Chrome and Edge, on a secure origin) and only then does the crawl band
+  // grow an INSTALL key; once installed, or opened from the home screen,
+  // there is nothing to offer. Safari never asks: the README says Share,
+  // Add to Home Screen. The service worker is scoped to the remote alone,
+  // so the display and the control room are never served from a cache.
+  const install = document.getElementById("install");
+  let offer = null;
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    offer = e;
+    install.hidden = false;
+  });
+  install.addEventListener("click", () => {
+    if (!offer) return;
+    const p = offer;
+    offer = null;
+    install.hidden = true;
+    p.prompt();
+  });
+  window.addEventListener("appinstalled", () => {
+    offer = null;
+    install.hidden = true;
+  });
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("remote-sw.js", { scope: "remote-control" }).catch(() => { /* http on the LAN: the remote works as a page */ });
+  }
+
   probe();
 })();

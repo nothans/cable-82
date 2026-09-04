@@ -248,6 +248,16 @@ try {
   check("the remote finds the listening set", await until(async () => /One set is listening/.test(await remote.textContent("#status")), 5000));
   await remote.click(".key[data-cmd=\"up\"]");
   check("a key on the remote reports the press", await until(async () => /Channel higher/.test(await remote.textContent("#status")), 3000));
+  // Installable: the worker registers on the remote's own scope and covers
+  // neither the display nor the control room.
+  const scopes = await remote.evaluate(async () => {
+    const reg = await navigator.serviceWorker.ready;
+    const covers = async (p) => !!(await navigator.serviceWorker.getRegistration(p));
+    return { scope: new URL(reg.scope).pathname, root: await covers("/"), room: await covers("/config"), self: await covers("/remote-control") };
+  });
+  check("the remote's service worker is scoped to /remote-control", scopes.scope === "/remote-control" && scopes.self);
+  check("the display and the control room are outside it", !scopes.root && !scopes.room);
+  check("the install key waits for the browser's offer", await remote.evaluate(() => document.getElementById("install").hidden));
   await remote.close();
 
   // A broken config.json at first start: the set says so instead of

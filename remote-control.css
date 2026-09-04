@@ -177,7 +177,7 @@ html, body {
   color: var(--white);
 }
 #status.warn { color: #F0C860; }
-#room {
+#room, #install {
   display: flex;
   align-items: center;
   padding: 0 14px;
@@ -188,7 +188,42 @@ html, body {
   border-left: 1px solid rgba(240, 240, 236, 0.35);
   flex: 0 0 auto;
 }
-#room:hover, #room:focus-visible { background: var(--blue); outline: none; }
+#install {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  border: 0;
+  border-left: 1px solid rgba(240, 240, 236, 0.35);
+  background: none;
+  font: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+#install[hidden] { display: none; }
+#room:hover, #room:focus-visible, #install:hover, #install:focus-visible { background: var(--blue); outline: none; }
+
+/* When the browser offers to install, the crawl band grows a second line:
+   the flag and the status stay on the first, INSTALL and CONTROL ROOM share
+   the second at full width, so neither the status nor the links get
+   squeezed on a phone. Browsers without :has() keep the one-line band. */
+#crawl:has(#install:not([hidden])) {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+}
+#crawl:has(#install:not([hidden])) #flag { grid-row: 1; grid-column: 1; }
+#crawl:has(#install:not([hidden])) #status { grid-row: 1; grid-column: 2 / 4; }
+#crawl:has(#install:not([hidden])) #install,
+#crawl:has(#install:not([hidden])) #room {
+  grid-row: 2;
+  justify-content: center;
+  padding: 14px;
+  border-left: 0;
+  border-top: 1px solid rgba(240, 240, 236, 0.35);
+}
+#crawl:has(#install:not([hidden])) #install { grid-column: 1 / 3; background: var(--blue); }
+#crawl:has(#install:not([hidden])) #room { grid-column: 3; border-left: 1px solid rgba(240, 240, 236, 0.35); }
+#crawl:has(#install:not([hidden])) #install:hover,
+#crawl:has(#install:not([hidden])) #install:focus-visible { background: var(--white); color: var(--ink); }
 
 /* A wide screen (a laptop trying the remote) keeps the phone's proportions
    in the middle rather than stretching the keys across the whole window. */
