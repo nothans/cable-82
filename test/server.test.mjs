@@ -591,7 +591,10 @@ test("a restart stops the station and flushes the disks before handing over", as
       assert.equal(r.status, 200);
       assert.deepEqual(await r.json(), { ok: true, cmd }, "it answers before it acts");
       await new Promise((r2) => setTimeout(r2, 700));
-      assert.deepEqual(ran, ["systemctl stop cable82", "sync", last], cmd + " follows the safe order");
+      // Never "systemctl stop cable82" first: that kills this very process
+      // before the next step, which is how 1.0.1's Restart left the Pi up
+      // with the channel stopped.
+      assert.deepEqual(ran, ["sync", last], cmd + " flushes, then hands over to systemd");
     }
   } finally {
     app2.close();

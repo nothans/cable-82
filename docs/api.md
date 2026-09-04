@@ -145,7 +145,7 @@ The control room's Server group shows all of this and refreshes it every ten sec
 
 ### `POST /api/system`
 
-`{"cmd":"restart"}` or `{"cmd":"shutdown"}`: stop the station, flush the disks, hand over to systemd.
+`{"cmd":"restart"}` or `{"cmd":"shutdown"}`: flush the disks, then hand over to systemd, which stops the station with everything else.
 Needs the `x-cable82-config: 1` header; answers `403` unless the machine is a Pi whose user can run `sudo` without a password.
 Answers before it acts, since the machine is about to stop being able to answer.
 

@@ -274,7 +274,7 @@ Then `sudo systemctl enable --now cable82`, and `systemctl status cable82` shoul
 When a new release comes out, see [Updating](#updating): one line, and the TV takes care of itself.
 
 Once the service is running, the control room's **Server** group grows a **Power** panel with Restart and Shut down.
-Both stop the station and flush the disks before handing over to systemd, which is the part that keeps a memory card intact, and each button asks twice before it does anything.
+Both flush the disks and hand over to systemd, which stops the station and the desktop in order before the card comes down, the part that keeps a memory card intact. Each button asks twice before it does anything.
 They only appear on a Raspberry Pi whose user can run `sudo` without a password, which is the default on Raspberry Pi OS; anywhere else the panel stays hidden.
 Like the tune API, they are open to anyone on your network who can reach the control room, so keep the Pi on a LAN you trust.
 Shutting down still leaves the Pi powered: wait for the green light to stop blinking, then pull the plug.

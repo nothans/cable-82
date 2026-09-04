@@ -958,9 +958,13 @@ function createApp(opts = {}) {
   }
 
   // Restarting and switching off the machine the station runs on. Pulling the
-  // power on a Pi mid-write is how an SD card dies, so both paths do what the
-  // runbook does by hand: stop the station cleanly, flush the disks, and only
-  // then hand over to systemd.
+  // power on a Pi mid-write is how an SD card dies, so both paths flush the
+  // disks and then hand over to systemd, whose reboot and poweroff stop every
+  // service (this one included) and the desktop in order before the
+  // filesystems come down. The station must never stop its own service
+  // first: systemd kills everything in the service, this process included,
+  // and the steps after that never run. That is exactly what happened on
+  // 1.0.1: Restart left the Pi up with the channel stopped and the tube dark.
   const POWER_STEPS = {
     restart: ["systemctl", "reboot"],
     shutdown: ["systemctl", "poweroff"],
@@ -998,11 +1002,6 @@ function createApp(opts = {}) {
         // Answer first, act after: the control room needs the reply before the
         // machine stops being able to send one.
         setTimeout(() => {
-          try {
-            run(["systemctl", "stop", "cable82"]);
-          } catch (e) {
-            /* not running under systemd, or already stopped: keep going */
-          }
           try {
             run(["sync"]);
           } catch (e) {
