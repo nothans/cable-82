@@ -1,11 +1,11 @@
-// Differential tests: the original dial.js (in Reference/, copied from
-// cable-82 at 5a91fec) runs in JavaScriptCore beside the Swift port, on
+// Differential tests: the station's own dial.js and config-schema.js, from
+// the top of this repo, run in JavaScriptCore beside the Swift port on
 // thousands of generated inputs, and the answers must be identical. Offsets
 // are compared bit for bit: an Apple TV and a browser display tuned to the
 // same channel have to land on the same frame.
 //
-// When upstream dial.js changes, copy the new file into Reference/ and these
-// tests show what the port needs to follow.
+// Because they read the live files, a change to the broadcast clock that the
+// port doesn't follow fails here instead of quietly desyncing the Apple TV.
 
 #if canImport(JavaScriptCore) && os(macOS)
 import Foundation
@@ -13,14 +13,19 @@ import JavaScriptCore
 import Testing
 @testable import CableCore
 
+/// The repo's top level: this file is tvos/CableCore/Tests/CableCoreTests/ReferenceTests.swift.
+private let repoRoot = URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    .deletingLastPathComponent().deletingLastPathComponent()
+
 /// dial.js and config-schema.js loaded in a fresh JS context.
 private final class ReferenceDial {
     let ctx = JSContext()!
 
     init() throws {
         ctx.exceptionHandler = { _, e in Issue.record("JS exception: \(e?.toString() ?? "?")") }
-        for name in ["config-schema", "dial"] {
-            let url = try #require(Bundle.module.url(forResource: name, withExtension: "js", subdirectory: "Reference"))
+        for name in ["config-schema.js", "dial.js"] {
+            let url = repoRoot.appending(path: name)
             ctx.evaluateScript(try String(contentsOf: url, encoding: .utf8), withSourceURL: url)
         }
         #expect(ctx.evaluateScript("typeof Cable82Dial.positionAt")?.toString() == "function")

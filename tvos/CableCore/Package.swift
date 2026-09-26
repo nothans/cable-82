@@ -13,10 +13,6 @@ let package = Package(
     ],
     targets: [
         .target(name: "CableCore"),
-        .testTarget(
-            name: "CableCoreTests",
-            dependencies: ["CableCore"],
-            resources: [.copy("Reference")]
-        ),
+        .testTarget(name: "CableCoreTests", dependencies: ["CableCore"]),
     ]
 )
