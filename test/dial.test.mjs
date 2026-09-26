@@ -62,6 +62,26 @@ test("channelTimeline plays whole while any duration is unknown, and without usa
   assert.deepEqual(D.channelTimeline(ch, [film("a.mp4", 600)], [spot("s2.mp4", null)], day).map((s) => s.file), ["a.mp4"]);
 });
 
+test("channelTimeline spaces between-program breaks with everyPrograms, and breaks at the loop's seam", () => {
+  const ch = programmed({ folder: "spots", everyMinutes: 0, spots: 1, everyPrograms: 5 });
+  const songs = Array.from({ length: 12 }, (_, i) => film("song" + String(i + 1).padStart(2, "0") + ".mp4", 200));
+  const tl = D.channelTimeline(ch, songs, [spot("s1.mp4", 30), spot("s2.mp4", 15)], day);
+  const kinds = tl.map((s) => (s.kind === "spot" ? "|" : "."));
+  assert.equal(kinds.join(""), ".....|.....|..|", "a break after songs 5 and 10, and after the last");
+  assert.deepEqual(tl.filter((s) => s.kind === "spot").map((s) => s.file), ["s1.mp4", "s2.mp4", "s1.mp4"]);
+  assert.deepEqual(
+    D.channelTimeline(programmed({ folder: "spots", everyMinutes: 0, spots: 1 }), songs.slice(0, 3), [spot("s1.mp4", 30)], day)
+      .map((s) => s.kind),
+    ["program", "spot", "program", "spot", "program", "spot"],
+    "no everyPrograms: a break after every program, as before"
+  );
+  const cut = D.channelTimeline(programmed({ folder: "spots", everyMinutes: 30, spots: 1, everyPrograms: 5 }),
+    [film("movie.mp4", 3600)], [spot("s1.mp4", 30)], day);
+  assert.deepEqual(cut.map((s) => s.kind), ["program", "spot", "program", "spot"], "acts ignore everyPrograms");
+  assert.equal(S.validateConfig({ channels: [{ number: 2, type: "video", folder: "a", breaks: { folder: "b", everyPrograms: 99 } }] })
+    .cfg.channels.find((c) => c.number === 2).breaks.everyPrograms, 50, "clamped to 50");
+});
+
 test("airState: saturday morning cartoons are on saturday morning, and say when they resume", () => {
   const ch = { mode: "schedule", schedule: [{ days: ["sat"], start: "08:00", end: "11:30" }] };
   const on = D.airState(ch, new Date(2026, 7, 29, 9, 0, 0)); // Sat Aug 29 2026

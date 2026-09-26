@@ -40,7 +40,7 @@ A `video` channel adds:
 | `mode` | `continuous` (always on the air) or `schedule` | `continuous` |
 | `schedule` | Windows `{ "days": ["sat","sun"], "start": "08:00", "end": "11:30" }`. An end at or before the start runs overnight into the next morning | `[]` |
 | `offAir` | What shows outside the windows: `testcard`, `bars`, `snow`, or `bulletin` (fall back to the board) | `testcard` |
-| `breaks` | Commercial breaks: `{ "folder": "spots", "everyMinutes": 15, "spots": 3 }`. Each program is cut into even acts of about `everyMinutes` (0 to 240; 0 means breaks only between programs) and a break of `spots` spots (1 to 20) follows every act. The spots folder must be a different folder | none |
+| `breaks` | Commercial breaks: `{ "folder": "spots", "everyMinutes": 15, "spots": 3 }`. Each program is cut into even acts of about `everyMinutes` (0 to 240; 0 means breaks only between programs) and a break of `spots` spots (1 to 20) follows every act. At 0 minutes, `everyPrograms` (1 to 50, default 1) spaces the breaks out: a break after every that-many programs, and always one at the end of the loop; a channel of three-minute music videos might take `"everyMinutes": 0, "everyPrograms": 5, "spots": 1`. The spots folder must be a different folder | none |
 | `titles` | What the guide calls this channel's programs: `filename` (the cleaned file name), `metadata` (the title written inside each file, read once and cached in `.titles.json` beside the videos; the file name when a file has none), or `fixed` (one name for the whole channel) | `filename` |
 | `title` | The one name, when `titles` is `fixed`. Empty means the channel's own name | the channel name |
 

@@ -253,7 +253,12 @@
             onchange: (e) => {
               const folder = e.target.value;
               if (!folder) delete ch.breaks;
-              else ch.breaks = { folder, everyMinutes: b ? b.everyMinutes : B.everyMinutes.dflt, spots: b ? b.spots : B.spots.dflt };
+              else ch.breaks = {
+                folder,
+                everyMinutes: b ? b.everyMinutes : B.everyMinutes.dflt,
+                spots: b ? b.spots : B.spots.dflt,
+                everyPrograms: b && b.everyPrograms ? b.everyPrograms : B.everyPrograms.dflt,
+              };
               renderChannels();
             },
           }, [
@@ -269,6 +274,12 @@
             el("span", { class: "note" }, "every"),
             numberInput("everyMinutes", "Minutes of program between breaks", "0 = breaks only between programs"),
             el("span", { class: "note" }, "min of program,"),
+          ]));
+          if (b.everyPrograms == null) b.everyPrograms = B.everyPrograms.dflt;
+          breaksRow.appendChild(el("span", { class: "ch-phrase" }, [
+            el("span", { class: "note" }, "at 0, after every"),
+            numberInput("everyPrograms", "Programs between breaks", "At 0 minutes: how many programs play between breaks"),
+            el("span", { class: "note" }, "programs,"),
           ]));
           breaksRow.appendChild(el("span", { class: "ch-phrase" }, [
             numberInput("spots", "Spots per break", "How many spots run in each break"),
