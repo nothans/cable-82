@@ -5,3 +5,4 @@ DerivedData/
 xcuserdata/
 *.xcuserstate
 build/
+CableTV/Config/Local.xcconfig
