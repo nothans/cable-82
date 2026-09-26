@@ -30,6 +30,30 @@ public struct StationClient: Sendable {
         try await get("api/channels")
     }
 
+    /// A configured RSS or Atom feed, fetched by the server (GET /api/feed/<id>).
+    public func feed(_ id: String) async throws -> Data {
+        var req = URLRequest(url: baseURL.appending(path: "api/feed").appending(path: id))
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        req.timeoutInterval = 12
+        let (data, resp) = try await session.data(for: req)
+        try check(resp, data)
+        return data
+    }
+
+    public func weather() async throws -> Weather { try await get("api/weather") }
+
+    /// The CheerLights color name.
+    public func cheerLights() async throws -> String? {
+        struct Answer: Decodable { var color: String? }
+        return try await (get("api/cheerlights") as Answer).color
+    }
+
+    /// The board's music bed: relative URLs of the files in music/, in order.
+    public func music() async throws -> [String] {
+        struct Answer: Decodable { struct Track: Decodable { var url: String }; var tracks: [Track] }
+        return try await (get("api/music") as Answer).tracks.map(\.url)
+    }
+
     /// Report file lengths so the server's `.durations.json` cache fills
     /// itself. `durations` is file name -> seconds.
     public func postDurations(folder: String, durations: [String: Double]) async throws {

@@ -19,6 +19,8 @@ public struct StationConfig: Decodable, Sendable {
     public var channels: [Channel]
     public var tuner: TunerConfig
     public var preview: PreviewConfig
+    /// Channel 82's settings, which live at the top level of config.json.
+    public var board: BoardConfig
 
     enum CodingKeys: String, CodingKey { case channelName, timeFormat, channels, tuner, preview }
 
@@ -29,6 +31,7 @@ public struct StationConfig: Decodable, Sendable {
         channels = try c.decodeIfPresent([Channel].self, forKey: .channels) ?? []
         tuner = try c.decodeIfPresent(TunerConfig.self, forKey: .tuner) ?? TunerConfig()
         preview = try c.decodeIfPresent(PreviewConfig.self, forKey: .preview) ?? PreviewConfig()
+        board = try BoardConfig(from: decoder)
     }
 
     /// The dial: enabled channels in number order, which is what the tuner walks.

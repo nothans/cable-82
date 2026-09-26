@@ -92,9 +92,11 @@ struct TVView: View {
             switch mode {
             case .snow: StaticView()
             case .bars: ColorBars()
-            case .testcard, .bulletin: // the board isn't on tvOS yet
+            case .testcard, .bulletin: // .bulletin shows the board instead, unless it's missing
                 TestCard(channel: tuner.current, text: text, clockMode: tuner.clockMode)
             }
+        case .board:
+            if let board = tuner.board { BoardView(board: board, clockMode: tuner.clockMode) }
         case .guide:
             GuideView(preview: tuner.preview, clockMode: tuner.clockMode, lineup: tuner.lineup,
                       listings: tuner.listings, refresh: tuner.refreshListings)

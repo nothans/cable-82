@@ -3,7 +3,7 @@ import Foundation
 
 /// The dial: a port of the video parts of cable-82's tuner.js. Channel
 /// changes and what covers them, the on-screen display, the off-air cards,
-/// and power. It carries the video channels and the guide; the board is next.
+/// and power. It carries the video channels, the guide, and the board.
 @Observable
 final class Tuner {
     enum Screen: Equatable {
@@ -14,6 +14,7 @@ final class Tuner {
         case offAir(Channel.OffAir, String) // outside scheduled hours, with the resume line
         case noPrograms
         case guide // channel 0, CABLEVUE
+        case board // channel 82, the Community Bulletin Board
     }
 
     struct Notice: Equatable {
@@ -37,6 +38,8 @@ final class Tuner {
     private(set) var lineup: [Channel] = []
     /// The station's listings for every video channel, as the guide reads them.
     private(set) var listings: [Int: Library] = [:]
+    /// Channel 82, made at boot and kept for the life of the set.
+    private(set) var board: BulletinBoard?
 
     let engine: ChannelEngine
     var current: Channel? { dial.indices.contains(index) ? dial[index] : nil }
@@ -69,9 +72,10 @@ final class Tuner {
             clockMode = cfg.timeFormat
             preview = cfg.preview
             lineup = cfg.dial
-            dial = cfg.dial.filter { $0.type == .video || $0.type == .guide }
+            board = BulletinBoard(config: cfg.board, client: client)
+            dial = cfg.dial.filter { $0.type != .external } // no web view on tvOS
             guard !dial.isEmpty else {
-                screen = .trouble("NO VIDEO CHANNELS ON THE DIAL YET. ADD ONE IN THE CONTROL ROOM AT \(stationHost)/config")
+                screen = .trouble("NOTHING THIS SET CAN SHOW IS ON THE DIAL. ADD A CHANNEL IN THE CONTROL ROOM AT \(stationHost)/config")
                 return
             }
             // string(forKey:) reads a stored number or a `-lastChannel 7` launch argument alike.
@@ -104,6 +108,7 @@ final class Tuner {
         tuneTask = Task {
             covering = before > 0
             engine.stop()
+            board?.deactivate()
             try? await Task.sleep(for: .milliseconds(before))
             guard !Task.isCancelled else { return }
             let t0 = Date()
@@ -138,6 +143,7 @@ final class Tuner {
         tuneTask?.cancel()
         flipTask?.cancel()
         engine.stop()
+        board?.deactivate()
         covering = false
     }
 
@@ -158,10 +164,20 @@ final class Tuner {
             await refreshListings()
             return
         }
+        if ch.type == .bulletin {
+            screen = .board
+            board?.activate()
+            return
+        }
         let state = Dial.airState(ch, at: Date())
         if let until = state.until { scheduleFlip(at: until) }
         guard state.onAir else {
-            screen = .offAir(ch.offAir, state.resumeText)
+            if ch.offAir == .bulletin, let board { // off the air, the channel falls back to the board
+                screen = .board
+                board.activate()
+            } else {
+                screen = .offAir(ch.offAir, state.resumeText)
+            }
             return
         }
 

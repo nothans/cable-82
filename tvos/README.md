@@ -3,10 +3,10 @@
 A native tvOS display for the station.
 It is another set on the same network, beside the browser display, not a replacement for it: the server, the control room, and the remote stay exactly as they are, and the Apple TV tunes in like any other set.
 
-It plays the video channels on the same broadcast clock, so an Apple TV and a browser on the same channel show the same frame, and it carries CABLEVUE on channel 0.
+It plays the video channels on the same broadcast clock, so an Apple TV and a browser on the same channel show the same frame, and it carries CABLEVUE on channel 0 and the Community Bulletin Board on 82: the pages, the weather card, the crawl with its headlines and the CheerLights color, and the music bed.
 Channel changes go under tuner static with the on-screen display, a scheduled channel off the air shows its test card and when it comes back, and Play/Pause switches the set off the way a tube does.
 
-Not yet: the Community Bulletin Board (channel 82) and the tuner bus, so the phone remote does not change an Apple TV's channel yet.
+Not yet: the tuner bus, so the phone remote does not change an Apple TV's channel yet.
 External channels cannot come: tvOS has no web view.
 The guide still lists every channel, including the ones this set cannot tune.
 
@@ -59,6 +59,8 @@ For a big folder that is worth doing ahead of time by playing the channel once i
 | `CableTV/CableTV/ChannelEngine.swift` | The player (`video.js`): two AVPlayers, the next segment cued and started on the host clock at its exact boundary, files loaded a few segments ahead. |
 | `CableTV/CableTV/Tuner.swift` | The dial (`tuner.js`): tuning under static, the on-screen display, off-air cards, power, measuring and posting durations. |
 | `CableTV/CableTV/GuideView.swift` | Channel 0 (`guide.js`). |
+| `CableCore/Sources/CableCore/Board.swift` | Channel 82's logic from `board.js` and the schema: the settings, the page rotation, the colors, feed parsing, the crawl text, `sanitize`. The helpers and color rules are tested against the JavaScript itself. |
+| `CableTV/CableTV/BulletinBoard.swift`, `BoardView.swift` | Channel 82 on screen: the refresh loops, the music bed, the header, the pages, and the crawl. |
 | `CableTV/Info.plist` | Plain HTTP on the local network (`NSAllowsLocalNetworking`) and the local-network prompt. |
 
 ## Testing
