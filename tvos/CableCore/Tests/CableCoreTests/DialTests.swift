@@ -183,4 +183,16 @@ private func programmed(_ b: Breaks?, _ order: Channel.Order = .sequence) -> Cha
     #expect(r.config.dial.map(\.number) == [2, 82])
     #expect(r.config.tuner.wrap == false)
     #expect(r.config.tuner.cut == .static)
+    #expect(r.config.preview == PreviewConfig(), "no preview key: the schema's defaults")
+}
+
+@Test func previewConfigClampsAndKeepsAnEmptyTagline() throws {
+    let json = #"{"name":"","tagline":"","slots":9,"scrollSeconds":1,"seconds":false,"background":"green"}"#
+    let p = try JSONDecoder().decode(PreviewConfig.self, from: Data(json.utf8))
+    #expect(p.name == "CABLEVUE")
+    #expect(p.tagline == "")
+    #expect(p.slots == 4)
+    #expect(p.scrollSeconds == 4)
+    #expect(p.seconds == false)
+    #expect(p.background == "green")
 }

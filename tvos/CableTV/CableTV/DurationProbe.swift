@@ -25,13 +25,19 @@ nonisolated enum DurationProbe {
 
     private static func duration(of url: URL, timeout: Double) async -> Double? {
         await withTaskGroup(of: Double?.self) { group in
+            let started = Date()
             group.addTask {
-                guard let d = try? await AVURLAsset(url: url).load(.duration) else { return nil }
-                let s = d.seconds
-                return s.isFinite && s > 0 ? s : nil
+                do {
+                    let s = try await AVURLAsset(url: url).load(.duration).seconds
+                    return s.isFinite && s > 0 ? s : nil
+                } catch {
+                    print("[probe] \(url.lastPathComponent): \(error.localizedDescription) after \(Int(-started.timeIntervalSinceNow))s")
+                    return nil
+                }
             }
             group.addTask {
                 try? await Task.sleep(for: .seconds(timeout))
+                if !Task.isCancelled { print("[probe] \(url.lastPathComponent): no answer in \(Int(timeout))s") }
                 return nil
             }
             let first = await group.next() ?? nil

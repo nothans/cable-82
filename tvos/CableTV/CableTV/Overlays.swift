@@ -7,6 +7,13 @@ enum Palette {
     static let blue = Color(hex: 0x2038C8)
     static let yellow = Color(hex: 0xC8A020)
     static let white = Color(hex: 0xF0F0EC)
+
+    /// A config color name ("blue", "cyan", ...) to its color; blue for anything unknown.
+    static func named(_ name: String) -> Color {
+        let hex: [String: UInt32] = ["blue": 0x2038C8, "cyan": 0x20A8B8, "green": 0x18A038, "yellow": 0xC8A020,
+                                     "red": 0xC03028, "magenta": 0xB03898, "white": 0xF0F0EC, "ink": 0x101018]
+        return Color(hex: hex[name] ?? 0x2038C8)
+    }
 }
 
 extension Color {

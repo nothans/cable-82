@@ -95,6 +95,9 @@ struct TVView: View {
             case .testcard, .bulletin: // the board isn't on tvOS yet
                 TestCard(channel: tuner.current, text: text, clockMode: tuner.clockMode)
             }
+        case .guide:
+            GuideView(preview: tuner.preview, clockMode: tuner.clockMode, lineup: tuner.lineup,
+                      listings: tuner.listings, refresh: tuner.refreshListings)
         case .onAir:
             EmptyView()
         }

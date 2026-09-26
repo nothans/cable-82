@@ -3,7 +3,7 @@ import Foundation
 
 /// The dial: a port of the video parts of cable-82's tuner.js. Channel
 /// changes and what covers them, the on-screen display, the off-air cards,
-/// and power. v1 carries video channels only; the board and the guide are next.
+/// and power. It carries the video channels and the guide; the board is next.
 @Observable
 final class Tuner {
     enum Screen: Equatable {
@@ -13,6 +13,7 @@ final class Tuner {
         case onAir
         case offAir(Channel.OffAir, String) // outside scheduled hours, with the resume line
         case noPrograms
+        case guide // channel 0, CABLEVUE
     }
 
     struct Notice: Equatable {
@@ -30,6 +31,12 @@ final class Tuner {
     /// The on-screen display: shown on every tune, gone after a moment.
     private(set) var notice: Notice?
     private(set) var clockMode: ClockMode = .twelveHour
+    private(set) var preview = PreviewConfig()
+    /// Every enabled channel, the board included: the guide lists them all,
+    /// the way the browser display's guide does, even the ones this set can't tune yet.
+    private(set) var lineup: [Channel] = []
+    /// The station's listings for every video channel, as the guide reads them.
+    private(set) var listings: [Int: Library] = [:]
 
     let engine: ChannelEngine
     var current: Channel? { dial.indices.contains(index) ? dial[index] : nil }
@@ -60,12 +67,15 @@ final class Tuner {
             let cfg = try await client.config().config
             tuner = cfg.tuner
             clockMode = cfg.timeFormat
-            dial = cfg.dial.filter { $0.type == .video }
+            preview = cfg.preview
+            lineup = cfg.dial
+            dial = cfg.dial.filter { $0.type == .video || $0.type == .guide }
             guard !dial.isEmpty else {
                 screen = .trouble("NO VIDEO CHANNELS ON THE DIAL YET. ADD ONE IN THE CONTROL ROOM AT \(stationHost)/config")
                 return
             }
-            let last = UserDefaults.standard.object(forKey: Self.lastChannelKey) as? Int
+            // string(forKey:) reads a stored number or a `-lastChannel 7` launch argument alike.
+            let last = UserDefaults.standard.string(forKey: Self.lastChannelKey).flatMap { Int($0) }
             log("last channel \(String(describing: last)), dial \(dial.map(\.number))")
             tune(to: dial.firstIndex { $0.number == last } ?? 0)
         } catch {
@@ -143,6 +153,11 @@ final class Tuner {
 
     private func air(_ ch: Channel) async {
         flipTask?.cancel()
+        if ch.type == .guide {
+            screen = .guide
+            await refreshListings()
+            return
+        }
         let state = Dial.airState(ch, at: Date())
         if let until = state.until { scheduleFlip(at: until) }
         guard state.onAir else {
@@ -178,6 +193,13 @@ final class Tuner {
         engine.start(ch, library: lib)
     }
 
+    /// Fetch every channel's listing for the guide. On failure the guide
+    /// keeps what it had (the dial still lists, just without titles).
+    func refreshListings() async {
+        guard let all = try? await client.channels().libraries else { return }
+        listings = all
+    }
+
     /// The clock can only run when every length is known. Measure the ones
     /// the server doesn't have yet and post them back so its cache fills.
     /// A file that can't be measured can't be played here either, so it
@@ -186,6 +208,7 @@ final class Tuner {
         let missing = lib.files.filter { $0.duration == nil } + lib.spots.filter { $0.duration == nil }
         guard !missing.isEmpty else { return lib }
         screen = .standBy("PLEASE STAND BY\nMEASURING \(missing.count) \(missing.count == 1 ? "PROGRAM" : "PROGRAMS")")
+        covering = false // this can take a while; show the card, not static
         let learned = await DurationProbe.probe(missing.map { client.mediaURL($0.url) })
 
         func fill(_ files: [MediaFile], folder: String?) -> [MediaFile] {

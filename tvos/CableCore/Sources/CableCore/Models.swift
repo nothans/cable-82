@@ -18,8 +18,9 @@ public struct StationConfig: Decodable, Sendable {
     public var timeFormat: ClockMode
     public var channels: [Channel]
     public var tuner: TunerConfig
+    public var preview: PreviewConfig
 
-    enum CodingKeys: String, CodingKey { case channelName, timeFormat, channels, tuner }
+    enum CodingKeys: String, CodingKey { case channelName, timeFormat, channels, tuner, preview }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -27,6 +28,7 @@ public struct StationConfig: Decodable, Sendable {
         timeFormat = c.lenient(ClockMode.self, .timeFormat) ?? .twelveHour
         channels = try c.decodeIfPresent([Channel].self, forKey: .channels) ?? []
         tuner = try c.decodeIfPresent(TunerConfig.self, forKey: .tuner) ?? TunerConfig()
+        preview = try c.decodeIfPresent(PreviewConfig.self, forKey: .preview) ?? PreviewConfig()
     }
 
     /// The dial: enabled channels in number order, which is what the tuner walks.
@@ -52,6 +54,34 @@ public struct TunerConfig: Decodable, Sendable {
         wrap = try c.decodeIfPresent(Bool.self, forKey: .wrap) ?? true
         cut = c.lenient(Cut.self, .cut) ?? .static
         power = c.lenient(Power.self, .power) ?? .crt
+    }
+}
+
+/// Channel 0's settings (`preview` in config.json): the guide's wordmark,
+/// its columns, how fast the lineup crawls, and its background color.
+public struct PreviewConfig: Decodable, Sendable, Equatable {
+    public var name = "CABLEVUE"
+    public var tagline = "WHAT'S ON, AND WHAT'S NEXT"
+    public var slots = 3
+    public var scrollSeconds = 14.0
+    public var seconds = true
+    /// A palette color name.
+    public var background = "blue"
+
+    public init() {}
+
+    enum CodingKeys: String, CodingKey { case name, tagline, slots, scrollSeconds, seconds, background }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = PreviewConfig()
+        name = (try? c.decodeIfPresent(String.self, forKey: .name)).flatMap { $0 }.flatMap { $0.isEmpty ? nil : $0 } ?? d.name
+        // An empty tagline is a choice; only a missing one takes the default.
+        tagline = (try? c.decodeIfPresent(String.self, forKey: .tagline)).flatMap { $0 } ?? d.tagline
+        slots = min(4, max(2, (try? c.decodeIfPresent(Int.self, forKey: .slots)).flatMap { $0 } ?? d.slots))
+        scrollSeconds = min(120, max(4, (try? c.decodeIfPresent(Double.self, forKey: .scrollSeconds)).flatMap { $0 } ?? d.scrollSeconds))
+        seconds = (try? c.decodeIfPresent(Bool.self, forKey: .seconds)).flatMap { $0 } ?? d.seconds
+        background = (try? c.decodeIfPresent(String.self, forKey: .background)).flatMap { $0 } ?? d.background
     }
 }
 
