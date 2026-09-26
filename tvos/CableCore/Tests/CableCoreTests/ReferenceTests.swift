@@ -71,7 +71,9 @@ private func js(_ c: Channel) -> [String: Any] {
         "titles": c.titles.rawValue,
         "schedule": c.schedule.map { ["days": $0.days, "start": $0.start, "end": $0.end] },
     ]
-    if let b = c.breaks { o["breaks"] = ["folder": b.folder, "everyMinutes": b.everyMinutes, "spots": b.spots] }
+    if let b = c.breaks {
+        o["breaks"] = ["folder": b.folder, "everyMinutes": b.everyMinutes, "spots": b.spots, "everyPrograms": b.everyPrograms]
+    }
     if let t = c.title { o["title"] = t }
     return o
 }
@@ -106,7 +108,8 @@ private func randomChannel(_ r: inout Rng) -> Channel {
     return Channel(number: r.int(1...999), type: .video, folder: "p",
                    order: r.bool() ? .shuffleDaily : .sequence,
                    mode: schedule.isEmpty ? .continuous : .schedule, schedule: schedule,
-                   breaks: r.bool() ? Breaks(folder: "s", everyMinutes: Double(r.int(0...60)), spots: r.int(1...4)) : nil)
+                   breaks: r.bool() ? Breaks(folder: "s", everyMinutes: Double(r.bool() ? 0 : r.int(0...60)), spots: r.int(1...4),
+                                             everyPrograms: r.int(1...6)) : nil)
 }
 
 private func randomDate(_ r: inout Rng) -> Date {

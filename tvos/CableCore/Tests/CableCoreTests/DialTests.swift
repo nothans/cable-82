@@ -66,6 +66,15 @@ private func programmed(_ b: Breaks?, _ order: Channel.Order = .sequence) -> Cha
         .map(\.file) == ["a.mp4"])
 }
 
+@Test func breaksCanComeEveryFewPrograms() throws {
+    let ch = programmed(Breaks(folder: "spots", everyMinutes: 0, spots: 1, everyPrograms: 5))
+    let songs = (1...12).map { film("song\($0).mp4", 200) }
+    let tl = Dial.channelTimeline(ch, files: songs, spots: [spot("s1.mp4", 30)], date: day)
+    #expect(tl.map { $0.kind == .spot ? "|" : "." }.joined() == ".....|.....|..|")
+    let json = #"{"folder":"spots","everyMinutes":0,"spots":1}"#
+    #expect(try JSONDecoder().decode(Breaks.self, from: Data(json.utf8)).everyPrograms == 1, "absent: every program")
+}
+
 @Test func airStateSaturdayMorningCartoons() {
     let ch = Channel(number: 1, type: .video, mode: .schedule,
                      schedule: [ScheduleWindow(days: ["sat"], start: "08:00", end: "11:30")])

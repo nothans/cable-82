@@ -161,14 +161,26 @@ public struct ScheduleWindow: Decodable, Sendable, Equatable {
 }
 
 /// Commercial breaks: spots from a second folder, cut into the program every
-/// `everyMinutes` (0 means only between programs), `spots` per break.
+/// `everyMinutes` (0 means only between programs), `spots` per break. At 0
+/// minutes, `everyPrograms` spaces the breaks out: one after every Nth program.
 public struct Breaks: Decodable, Sendable, Equatable {
     public var folder: String
     public var everyMinutes: Double
     public var spots: Int
+    public var everyPrograms: Int
 
-    public init(folder: String, everyMinutes: Double, spots: Int) {
-        self.folder = folder; self.everyMinutes = everyMinutes; self.spots = spots
+    public init(folder: String, everyMinutes: Double, spots: Int, everyPrograms: Int = 1) {
+        self.folder = folder; self.everyMinutes = everyMinutes; self.spots = spots; self.everyPrograms = everyPrograms
+    }
+
+    enum CodingKeys: String, CodingKey { case folder, everyMinutes, spots, everyPrograms }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        folder = try c.decode(String.self, forKey: .folder)
+        everyMinutes = try c.decode(Double.self, forKey: .everyMinutes)
+        spots = try c.decode(Int.self, forKey: .spots)
+        everyPrograms = (try? c.decodeIfPresent(Int.self, forKey: .everyPrograms)).flatMap { $0 } ?? 1 // written only when not 1
     }
 }
 

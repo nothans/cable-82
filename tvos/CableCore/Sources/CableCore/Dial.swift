@@ -156,7 +156,9 @@ public enum Dial {
     /// each program is cut into acts of about `everyMinutes` (a 63-minute film
     /// at 15 becomes four acts of 15:45). A break of `spots` spots follows
     /// every act, the last one included, so a break separates programs. The
-    /// spot pool cycles across the whole loop. Acts need every program's
+    /// spot pool cycles across the whole loop. At 0 minutes, `everyPrograms`
+    /// spaces the breaks out: one after every Nth program, and always one at
+    /// the end of the loop, so the loop's seam is a break too. Acts need every program's
     /// duration up front; spots with unknown lengths sit out, and if no spots
     /// are usable the programs play whole.
     public static func channelTimeline(_ channel: Channel, files: [MediaFile], spots: [MediaFile],
@@ -176,9 +178,10 @@ public enum Dial {
             return program.map { whole($0, .program) }
         }
         let actLen = b.everyMinutes * 60
+        let every = actLen > 0 ? 1 : max(1, b.everyPrograms)
         var out: [Segment] = []
         var cursor = 0
-        for p in program {
+        for (pi, p) in program.enumerated() {
             let d = p.duration!
             let acts = actLen > 0 ? max(1, Int((d / actLen).rounded(.toNearestOrAwayFromZero))) : 1
             for a in 0..<acts {
@@ -186,6 +189,7 @@ public enum Dial {
                 let to = a == acts - 1 ? d : (d * Double(a + 1)) / Double(acts)
                 out.append(Segment(kind: .program, file: p.file, title: p.title, url: p.url,
                                    from: from, to: to, duration: to - from))
+                if (pi + 1) % every != 0 && pi != program.count - 1 { continue }
                 for _ in 0..<b.spots {
                     out.append(whole(pool[cursor % pool.count], .spot))
                     cursor += 1
