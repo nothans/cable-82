@@ -58,6 +58,7 @@ For a big folder that is worth doing ahead of time by playing the channel once i
 | `CableCore/Tests/` | `test/dial.test.mjs` ported case for case, and `ReferenceTests.swift`, which runs this repo's own `dial.js` and `config-schema.js` in JavaScriptCore on thousands of generated inputs and requires the Swift answers to match, offsets bit for bit. |
 | `CableTV/CableTV/ChannelEngine.swift` | The player (`video.js`): two AVPlayers, the next segment cued and started on the host clock at its exact boundary, files loaded a few segments ahead. |
 | `CableTV/CableTV/Tuner.swift` | The dial (`tuner.js`): tuning under static, the on-screen display, off-air cards, power, measuring and posting durations. |
+| `CableCore/Sources/CableCore/Playout.swift` | The engine's and the tuner's decisions with no player in them: drift and start timing against the clock, the end-and-stall watch (`video.js`'s `endWatch`), the day's new running order at midnight, what a tune shows, and folding measured lengths into a listing. |
 | `CableTV/CableTV/GuideView.swift` | Channel 0 (`guide.js`). |
 | `CableCore/Sources/CableCore/Board.swift` | Channel 82's logic from `board.js` and the schema: the settings, the page rotation, the colors, feed parsing, the crawl text, `sanitize`. The helpers and color rules are tested against the JavaScript itself. |
 | `CableTV/CableTV/BulletinBoard.swift`, `BoardView.swift` | Channel 82 on screen: the refresh loops, the music bed, the header, the pages, and the crawl. |
@@ -69,4 +70,19 @@ For a big folder that is worth doing ahead of time by playing the channel once i
 cd tvos/CableCore && swift test
 ```
 
-Because the reference tests read the live `dial.js`, a change to the broadcast clock shows up here as a failure until the Swift port follows it.
+Because the reference tests read the live `dial.js` and `config-schema.js`, a change to the broadcast clock, or to a default or a limit the Apple TV reads, shows up here as a failure until the Swift port follows it.
+`ContractTests.swift` puts configs full of hand-edit mistakes through the schema's own `validateConfig` and requires the Swift models to read back exactly what it serves.
+
+Local time matters to the schedules and the daily shuffle, and the reference tests run in the Mac's own time zone.
+Both JavaScriptCore and Foundation follow `TZ`, so run a few:
+
+```
+for tz in UTC America/New_York Australia/Lord_Howe Asia/Kolkata; do TZ=$tz swift test; done
+```
+
+The player and the tuner are tested on the simulator, against a station made of files and clips written by the test (`CableTV/CableTVTests`): cuts land on the clock, a file that won't play sits out behind the card, and a reconnect leaves nothing playing behind it.
+
+```
+cd tvos/CableTV
+xcodebuild test -scheme CableTV -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation) (at 1080p)'
+```

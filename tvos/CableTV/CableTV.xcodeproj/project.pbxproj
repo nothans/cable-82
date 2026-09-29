@@ -10,15 +10,31 @@
 		C82C0DE0000000000000A001 /* CableCore in Frameworks */ = {isa = PBXBuildFile; productRef = C82C0DE0000000000000A003 /* CableCore */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		C82C0DE0000000000000B008 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98C6D87230673BF700166086 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 98C6D87930673BF700166086;
+			remoteInfo = CableTV;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		98C6D87A30673BF700166086 /* CableTV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CableTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C82C0DE0000000000000A004 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Signing.xcconfig; path = Config/Signing.xcconfig; sourceTree = "<group>"; };
+		C82C0DE0000000000000B002 /* CableTVTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CableTVTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		98C6D87C30673BF700166086 /* CableTV */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = CableTV;
+			sourceTree = "<group>";
+		};
+		C82C0DE0000000000000B003 /* CableTVTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CableTVTests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -30,6 +46,11 @@
 				C82C0DE0000000000000A001 /* CableCore in Frameworks */,
 			);
 		};
+		C82C0DE0000000000000B005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -37,6 +58,7 @@
 			isa = PBXGroup;
 			children = (
 				98C6D87C30673BF700166086 /* CableTV */,
+				C82C0DE0000000000000B003 /* CableTVTests */,
 				C82C0DE0000000000000A004 /* Signing.xcconfig */,
 				98C6D87B30673BF700166086 /* Products */,
 			);
@@ -46,6 +68,7 @@
 			isa = PBXGroup;
 			children = (
 				98C6D87A30673BF700166086 /* CableTV.app */,
+				C82C0DE0000000000000B002 /* CableTVTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -74,6 +97,27 @@
 			productReference = 98C6D87A30673BF700166086 /* CableTV.app */;
 			productType = "com.apple.product-type.application";
 		};
+		C82C0DE0000000000000B001 /* CableTVTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C82C0DE0000000000000B009 /* Build configuration list for PBXNativeTarget "CableTVTests" */;
+			buildPhases = (
+				C82C0DE0000000000000B004 /* Sources */,
+				C82C0DE0000000000000B005 /* Frameworks */,
+				C82C0DE0000000000000B006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C82C0DE0000000000000B007 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				C82C0DE0000000000000B003 /* CableTVTests */,
+			);
+			name = CableTVTests;
+			productName = CableTVTests;
+			productReference = C82C0DE0000000000000B002 /* CableTVTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -86,6 +130,10 @@
 				TargetAttributes = {
 					98C6D87930673BF700166086 = {
 						CreatedOnToolsVersion = 27.0;
+					};
+					C82C0DE0000000000000B001 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = 98C6D87930673BF700166086;
 					};
 				};
 			};
@@ -107,12 +155,18 @@
 			projectRoot = "";
 			targets = (
 				98C6D87930673BF700166086 /* CableTV */,
+				C82C0DE0000000000000B001 /* CableTVTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		98C6D87830673BF700166086 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+		C82C0DE0000000000000B006 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
 			);
@@ -125,7 +179,20 @@
 			files = (
 			);
 		};
+		C82C0DE0000000000000B004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		C82C0DE0000000000000B007 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 98C6D87930673BF700166086 /* CableTV */;
+			targetProxy = C82C0DE0000000000000B008 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		98C6D88330673BF800166086 /* Debug configuration for PBXProject "CableTV" */ = {
@@ -272,7 +339,7 @@
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 3;
 			};
 			name = Debug;
@@ -302,8 +369,50 @@
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 3;
+			};
+			name = Release;
+		};
+		C82C0DE0000000000000B00A /* Debug configuration for PBXNativeTarget "CableTVTests" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = C82C0DE0000000000000A004 /* Signing.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(CABLETV_BUNDLE_PREFIX).CableTVTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CableTV.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CableTV";
+			};
+			name = Debug;
+		};
+		C82C0DE0000000000000B00B /* Release configuration for PBXNativeTarget "CableTVTests" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = C82C0DE0000000000000A004 /* Signing.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(CABLETV_BUNDLE_PREFIX).CableTVTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CableTV.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CableTV";
 			};
 			name = Release;
 		};
@@ -323,6 +432,14 @@
 			buildConfigurations = (
 				98C6D88630673BF800166086 /* Debug configuration for PBXNativeTarget "CableTV" */,
 				98C6D88730673BF800166086 /* Release configuration for PBXNativeTarget "CableTV" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		C82C0DE0000000000000B009 /* Build configuration list for PBXNativeTarget "CableTVTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C82C0DE0000000000000B00A /* Debug configuration for PBXNativeTarget "CableTVTests" */,
+				C82C0DE0000000000000B00B /* Release configuration for PBXNativeTarget "CableTVTests" */,
 			);
 			defaultConfigurationName = Release;
 		};
