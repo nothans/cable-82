@@ -1,0 +1,5 @@
+// Copy to Local.xcconfig and fill in. Your team ID is in Xcode under
+// Settings > Accounts, or at developer.apple.com/account. A free "Personal
+// Team" works for your own Apple TV (builds expire after 7 days).
+DEVELOPMENT_TEAM = ABCDE12345
+CABLETV_BUNDLE_PREFIX = com.yourname

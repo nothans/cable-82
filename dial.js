@@ -97,7 +97,10 @@
   // becomes four acts of 15:45), a break of `spots` spots follows every act
   // - the last one included, so a break separates programs - and the spot
   // pool cycles across the whole loop so each spot airs as often as the
-  // next. The movie resumes exactly where the break cut it.
+  // next. The movie resumes exactly where the break cut it. At 0 minutes
+  // (breaks only between programs) everyPrograms spaces the breaks out: a
+  // break after every Nth program, and always one at the end of the loop,
+  // so the loop's seam is a break too.
   // Acts need every program duration up front; a spot whose length is not
   // known yet sits out until the probe learns it. No usable spots (an empty
   // or unprobed folder) means the program folder plays whole.
@@ -114,17 +117,19 @@
     const whole = (f, kind) => ({ kind, file: f.file, title: f.title || null, url: f.url, from: 0, to: f.duration, duration: f.duration });
     if (!b || !pool.length || program.some((f) => !(f.duration > 0))) return program.map((f) => whole(f, "program"));
     const actLen = b.everyMinutes * 60;
+    const every = actLen > 0 ? 1 : Math.max(1, Math.round(b.everyPrograms || 1));
     const out = [];
     let cursor = 0;
-    for (const p of program) {
+    program.forEach((p, pi) => {
       const acts = actLen > 0 ? Math.max(1, Math.round(p.duration / actLen)) : 1;
       for (let a = 0; a < acts; a++) {
         const from = (p.duration * a) / acts;
         const to = a === acts - 1 ? p.duration : (p.duration * (a + 1)) / acts;
         out.push({ kind: "program", file: p.file, title: p.title || null, url: p.url, from, to, duration: to - from });
+        if ((pi + 1) % every !== 0 && pi !== program.length - 1) continue;
         for (let k = 0; k < b.spots; k++) out.push(whole(pool[cursor++ % pool.length], "spot"));
       }
-    }
+    });
     return out;
   }
 

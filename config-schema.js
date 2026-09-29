@@ -69,7 +69,14 @@
   // Commercial breaks on a video channel: spots from a second folder, cut
   // into the program every so many minutes. everyMinutes 0 means breaks
   // only between programs; the range tops out at a movie-length act.
-  const BREAKS = { everyMinutes: { min: 0, max: 240, dflt: 15 }, spots: { min: 1, max: 20, dflt: 3 } };
+  // everyPrograms spaces those between-program breaks out: 1 is a break
+  // after every program, 5 a break after every fifth (a channel of short
+  // music videos wants that).
+  const BREAKS = {
+    everyMinutes: { min: 0, max: 240, dflt: 15 },
+    spots: { min: 1, max: 20, dflt: 3 },
+    everyPrograms: { min: 1, max: 50, dflt: 1 },
+  };
   // The guide channel: how many half-hour columns fit across, how long a
   // screenful takes to crawl past, and whether the clock counts seconds the
   // way a headend guide's did.
@@ -429,11 +436,17 @@
     }
     const e = BREAKS.everyMinutes;
     const k = BREAKS.spots;
-    return {
+    const n = BREAKS.everyPrograms;
+    const out = {
       folder,
       everyMinutes: Math.round(clampNum(raw.everyMinutes, e.min, e.max, e.dflt)),
       spots: Math.round(clampNum(raw.spots, k.min, k.max, k.dflt)),
     };
+    // Written only when it spaces the breaks out, so a config that never
+    // uses it saves exactly as it did before the setting existed.
+    const every = Math.round(clampNum(raw.everyPrograms, n.min, n.max, n.dflt));
+    if (every !== n.dflt) out.everyPrograms = every;
+    return out;
   }
 
   // The dial. Absent or empty -> a one-channel system: the classic board as

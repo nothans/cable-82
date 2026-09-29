@@ -22,6 +22,7 @@ Features:
 - **Switches off like a tube** - the picture folds into a bright line, snaps to a dot, and the phosphor fades. On, it blooms back open.
 - **Made for CRTs** - 4:3 composition, per-axis overscan margins, a broadcast-safe palette, and a softer one for composite and RF.
 - **Faux CRT for flat panels** - the picture plays inside a drawn wood console that fills the screen, its channel dial turning on every tune, with the tells of a tube as settings: curve, scanlines, noise, wave, bloom, vignette, flicker.
+- **Apple TV** - a native tvOS display in [`tvos/`](tvos/README.md): another set on the same station, playing the video channels on the same broadcast clock, with CABLEVUE on 0.
 
 Resources:
 
@@ -531,6 +532,7 @@ No build step, no dependencies: the files are what the browser runs.
 | `remote-control.html`, `remote-control.js`, `remote-control.css` | The remote |
 | `remote-control.webmanifest`, `remote-sw.js`, `favicon.svg`, `icon-*.png`, `icon-maskable.svg` | What lets a phone install the remote: the manifest, a service worker scoped to the remote alone, and the 82 icon (the PNGs rasterized from the SVG at whole pixels) |
 | `docs/` | [The API](docs/api.md) and [the configuration file](docs/config.md) |
+| `tvos/` | The [Apple TV display](tvos/README.md): a Swift port of the broadcast clock, tested against `dial.js` itself, and a tvOS app built on it. The station does not need it and nothing else depends on it |
 
 ## Testing
 
@@ -540,6 +542,7 @@ No build step, no dependencies: the files are what the browser runs.
 - Tuner drill by hand: with more than one channel on the dial, `curl -X POST http://localhost:1982/api/tune -H "content-type: application/json" -d "{\"cmd\":\"up\"}"` and watch the display change channels - the whole bus in one command.
 - Failure drill: `node server.js --chaos` serves mock feeds that randomly hang and fail, so you can watch the Community Board shrug it off.
 - Soak: open `http://localhost:1982/?soak=1` for accelerated channel-82 page flips and refreshes with stats logged to the console.
+- Apple TV: `cd tvos/CableCore && swift test` on a Mac runs the Swift broadcast clock against `dial.js` itself; see [tvos/README.md](tvos/README.md).
 
 ## Credits
 
