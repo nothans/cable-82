@@ -1,0 +1,51 @@
+# Every push and pull request: the station's tests, and the Apple TV port's.
+# The Swift reference tests run the repo's own dial.js and config-schema.js,
+# so a change to the broadcast clock or the schema that the Apple TV doesn't
+# follow fails here, on the change that caused it.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  station:
+    name: station (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [18, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: node --test test/*.test.mjs # e2e.mjs needs a browser; see the README
+
+  cablecore:
+    name: apple tv clock (TZ=${{ matrix.tz }})
+    runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        # No daylight saving, a US zone, and a half-hour daylight shift.
+        tz: [UTC, America/New_York, Australia/Lord_Howe]
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test
+        working-directory: tvos/CableCore
+        env:
+          TZ: ${{ matrix.tz }}
+
+  cabletv:
+    name: apple tv player (simulator)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make sure a tvOS simulator is installed
+        run: xcrun simctl list runtimes | grep -q tvOS || xcodebuild -downloadPlatform tvOS
+      - name: Test on the simulator
+        working-directory: tvos/CableTV
+        run: |
+          device=$(xcrun simctl list devices available | sed -n '/-- tvOS/,/-- [^t]/p' | grep -m1 -oE '[0-9A-F]{8}-[0-9A-F-]{27}')
+          xcodebuild test -scheme CableTV -destination "platform=tvOS Simulator,id=$device" CODE_SIGNING_ALLOWED=NO
