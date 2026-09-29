@@ -72,7 +72,7 @@ public struct BoardConfig: Decodable, Sendable {
     }
 
     public var channelName = "CABLE 82"
-    public var tagline = "COMMUNITY BULLETIN BOARD"
+    public var tagline = "" // the schema's answer for a missing tagline; DEFAULT_CONFIG's is only for a new station
     public var messages: [Message] = []
     public var facts: [String] = []
     public var dadJokes: [String] = []

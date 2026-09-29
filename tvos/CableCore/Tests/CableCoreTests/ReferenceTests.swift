@@ -14,12 +14,12 @@ import Testing
 @testable import CableCore
 
 /// The repo's top level: this file is tvos/CableCore/Tests/CableCoreTests/ReferenceTests.swift.
-private let repoRoot = URL(fileURLWithPath: #filePath)
+let repoRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     .deletingLastPathComponent().deletingLastPathComponent()
 
 /// dial.js and config-schema.js loaded in a fresh JS context.
-private final class ReferenceDial {
+final class ReferenceDial {
     let ctx = JSContext()!
 
     init() throws {
@@ -34,6 +34,11 @@ private final class ReferenceDial {
     /// Evaluate `expr` (which may use the given JSON-encoded bindings) and
     /// decode JSON.stringify of the result.
     func call<T: Decodable>(_ expr: String, _ bindings: [String: Any] = [:], as _: T.Type = T.self) throws -> T {
+        try JSONDecoder().decode(T.self, from: json(expr, bindings))
+    }
+
+    /// JSON.stringify of `expr`, as bytes.
+    func json(_ expr: String, _ bindings: [String: Any] = [:]) throws -> Data {
         var prelude = ""
         for (k, v) in bindings {
             let data = try JSONSerialization.data(withJSONObject: v, options: [.fragmentsAllowed])
@@ -41,12 +46,12 @@ private final class ReferenceDial {
         }
         let src = "(() => { \(prelude) return JSON.stringify(\(expr)); })()"
         let out = try #require(ctx.evaluateScript(src)?.toString())
-        return try JSONDecoder().decode(T.self, from: Data(out.utf8))
+        return Data(out.utf8)
     }
 }
 
 /// SplitMix64, so failures reproduce.
-private struct Rng {
+struct Rng {
     var state: UInt64
     mutating func next() -> UInt64 {
         state &+= 0x9E37_79B9_7F4A_7C15
@@ -90,14 +95,21 @@ private struct JSGrid: Decodable { var rows: [JSRow] }
 private func randomLibrary(_ r: inout Rng, prefix: String, count: ClosedRange<Int>, unknownRate: Int = 0) -> [MediaFile] {
     (0..<r.int(count)).map { i in
         let unknown = unknownRate > 0 && r.int(0...unknownRate) == 0
+        // Some files carry a title of their own, for channels that list by metadata.
+        let title = [nil, "", "the \(prefix) show \(i)"][r.int(0...2)]
         return MediaFile(file: "\(prefix)\(i).mp4", url: "channels/\(prefix)/\(i).mp4",
-                         duration: unknown ? nil : r.double(5, 7200))
+                         duration: unknown ? nil : r.double(5, 7200), title: title)
     }
 }
 
 private func randomChannel(_ r: inout Rng) -> Channel {
     let days = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
-    let hm = { (r: inout Rng) in "\(r.int(0...23)):\(Dial.pad2(r.int(0...3) * 15))" }
+    // Mostly good times, sometimes what a hand edit leaves: out of range,
+    // unpadded, padded with spaces, "24:00", or not a time at all.
+    let odd = ["24:00", "25:00", "12:60", "8:5", "7:30", " 07:30 ", "00:00", "23:59", "", "noon", "1:2:3"]
+    let hm = { (r: inout Rng) in
+        r.int(0...5) == 0 ? odd[r.int(0...(odd.count - 1))] : "\(r.int(0...23)):\(Dial.pad2(r.int(0...3) * 15))"
+    }
     var schedule: [ScheduleWindow] = []
     if r.bool() {
         for _ in 0..<r.int(1...3) {
@@ -108,18 +120,57 @@ private func randomChannel(_ r: inout Rng) -> Channel {
     return Channel(number: r.int(1...999), type: .video, folder: "p",
                    order: r.bool() ? .shuffleDaily : .sequence,
                    mode: schedule.isEmpty ? .continuous : .schedule, schedule: schedule,
-                   breaks: r.bool() ? Breaks(folder: "s", everyMinutes: Double(r.bool() ? 0 : r.int(0...60)), spots: r.int(1...4),
+                   breaks: r.bool() ? Breaks(folder: "s", everyMinutes: r.bool() ? 0 : r.bool() ? Double(r.int(0...60)) : r.double(0.5, 45), spots: r.int(1...4),
                                              everyPrograms: r.int(1...6)) : nil)
 }
 
+/// This machine's daylight-saving changes from 2019 through 2031 (none in a
+/// zone without them). Run the suite under several TZ values to cover more.
+private let dstChanges: [Date] = {
+    var out: [Date] = []
+    var d = Date(timeIntervalSince1970: 1_546_300_800) // 2019-01-01
+    let end = Date(timeIntervalSince1970: 1_956_528_000) // 2032-01-01
+    while let next = TimeZone.current.nextDaylightSavingTimeTransition(after: d), next < end {
+        out.append(next)
+        d = next
+    }
+    return out
+}()
+
 private func randomDate(_ r: inout Rng) -> Date {
-    // 2026 through 2030, at any millisecond: across DST changes and many loop wraps.
-    Date(timeIntervalSince1970: (Dial.epochMs + r.double(0, 5 * 365.25 * 86_400_000).rounded()) / 1000)
+    let day = 86_400_000.0
+    switch r.int(0...9) {
+    case 0...4:
+        // 2026 through 2030, at any millisecond: many loop wraps.
+        return Date(timeIntervalSince1970: (Dial.epochMs + r.double(0, 5 * 365.25 * day).rounded()) / 1000)
+    case 5, 6:
+        // Before the epoch: a set whose clock is wrong, or a station started in 2019.
+        return Date(timeIntervalSince1970: (Dial.epochMs - r.double(0, 7 * 365.25 * day).rounded()) / 1000)
+    case 7...8 where !dstChanges.isEmpty:
+        // Within two hours of a daylight-saving change, where local time skips or repeats.
+        let t = dstChanges[r.int(0...(dstChanges.count - 1))]
+        return t.addingTimeInterval((r.double(-7200, 7200) * 1000).rounded() / 1000)
+    default:
+        // Within a minute and a half of a local midnight, where the day's shuffle turns over.
+        let base = Date(timeIntervalSince1970: (Dial.epochMs + r.double(-2 * 365.25 * day, 5 * 365.25 * day)) / 1000)
+        let midnight = Calendar.current.startOfDay(for: base)
+        return midnight.addingTimeInterval((r.double(-90, 90) * 1000).rounded() / 1000)
+    }
 }
 
 @Suite struct ReferenceTests {
     fileprivate let ref: ReferenceDial
     init() throws { ref = try ReferenceDial() }
+
+    @Test func javaScriptAndSwiftAreInTheSameTimeZone() throws {
+        // Every local-time answer below depends on this. Run the suite with
+        // TZ=... to test another zone; both sides have to follow it.
+        for t in [0.0, Dial.epochMs, 1_783_000_000_000, 1_798_000_000_000] {
+            let js: Int = try ref.call("new Date(t).getTimezoneOffset()", ["t": t])
+            let swift = -TimeZone.current.secondsFromGMT(for: Date(timeIntervalSince1970: t / 1000)) / 60
+            #expect(js == swift, "at \(t): JS says \(js), Swift says \(swift)")
+        }
+    }
 
     @Test func seededShuffleMatchesBitForBit() throws {
         var r = Rng(state: 1)
@@ -172,6 +223,27 @@ private func randomDate(_ r: inout Rng) -> Date {
         }
     }
 
+    @Test func anOvernightWindowAcrossTheWeeksEndMatches() throws {
+        // Saturday night into Sunday morning wraps the week (day 6 to day 0).
+        let windows = [
+            [ScheduleWindow(days: ["sat"], start: "22:00", end: "02:00")],
+            [ScheduleWindow(days: ["sat", "sun"], start: "23:30", end: "00:30")],
+            [ScheduleWindow(days: ["sat"], start: "20:00", end: "00:00")], // until midnight, no morning half
+            [ScheduleWindow(days: ["sat"], start: "18:00", end: "18:00")], // a whole day
+        ]
+        let sat = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 3, hour: 12))!
+        for w in windows {
+            let ch = Channel(number: 7, type: .video, folder: "p", mode: .schedule, schedule: w)
+            for minutes in stride(from: 0, through: 36 * 60, by: 7) {
+                let date = sat.addingTimeInterval(Double(minutes) * 60 + 13)
+                let a: JSAir = try ref.call("Cable82Dial.airState(ch, new Date(t))", ["ch": js(ch), "t": ms(date)])
+                let s = Dial.airState(ch, at: date)
+                #expect(s.onAir == a.onAir && s.until.map(ms) == a.untilMs && s.resumeText == a.resumeText,
+                        "\(w) at \(date)")
+            }
+        }
+    }
+
     @Test func programTitleMatches() throws {
         let names = [
             "02 Design for Dreaming (1956).mp4", "S01.E13 Duck and Cover.mkv", "s1e2_the_pilot.MOV",
@@ -193,7 +265,8 @@ private func randomDate(_ r: inout Rng) -> Date {
             for n in 1...4 {
                 var ch = randomChannel(&r)
                 ch.number = n
-                ch.titles = [.filename, .fixed][r.int(0...1)]
+                ch.titles = [.filename, .fixed, .metadata][r.int(0...2)]
+                if ch.titles == .fixed, r.bool() { ch.title = "MOVIE NIGHT" }
                 ch.enabled = r.int(0...5) > 0
                 let lib = Library(files: randomLibrary(&r, prefix: "p", count: 0...6),
                                   spots: randomLibrary(&r, prefix: "s", count: 0...4))
