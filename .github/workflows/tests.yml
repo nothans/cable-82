@@ -16,8 +16,8 @@ jobs:
       matrix:
         node: [18, 22]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
       - run: node --test test/*.test.mjs # e2e.mjs needs a browser; see the README
@@ -31,7 +31,7 @@ jobs:
         # No daylight saving, a US zone, and a half-hour daylight shift.
         tz: [UTC, America/New_York, Australia/Lord_Howe]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: swift test
         working-directory: tvos/CableCore
         env:
@@ -41,7 +41,7 @@ jobs:
     name: apple tv player (simulator)
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Make sure a tvOS simulator is installed
         run: xcrun simctl list runtimes | grep -q tvOS || xcodebuild -downloadPlatform tvOS
       - name: Test on the simulator
