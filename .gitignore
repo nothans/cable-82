@@ -16,6 +16,9 @@ Thumbs.db
 # Local tooling artifacts.
 .playwright-mcp/
 
+# A maintainer's own session notes and scripts stay on their machine.
+.meta/
+
 # Channel video content stays local. A channel is a folder of your own video
 # files under channels/; those files (and the learned .durations.json caches)
 # never belong in the repo. The README documenting the layout is tracked.
