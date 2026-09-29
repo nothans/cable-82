@@ -21,6 +21,7 @@ final class BulletinBoard {
     @ObservationIgnored private var loops: [Task<Void, Never>] = []
     @ObservationIgnored private var pageTask: Task<Void, Never>?
     @ObservationIgnored private var started = false
+    @ObservationIgnored private var shut = false
     @ObservationIgnored private let music = AVPlayer()
     @ObservationIgnored private var tracks: [URL] = []
     @ObservationIgnored private var trackIndex = 0
@@ -35,11 +36,12 @@ final class BulletinBoard {
         music.automaticallyWaitsToMinimizeStalling = true
     }
 
-    deinit { loops.forEach { $0.cancel() } }
+    isolated deinit { shutdown() }
 
     // MARK: - On and off the air
 
     func activate() {
+        guard !shut else { return }
         if !started { start() }
         advance() // a fresh page the moment the board is back
         pageTask?.cancel()
@@ -59,7 +61,22 @@ final class BulletinBoard {
         music.pause()
     }
 
+    /// Off for good: a board being replaced (a reconnect, another station)
+    /// stops its loops and its music, so it can't keep calling out or playing.
+    func shutdown() {
+        shut = true
+        deactivate()
+        loops.forEach { $0.cancel() }
+        loops = []
+        music.replaceCurrentItem(with: nil)
+        if let musicObserver { NotificationCenter.default.removeObserver(musicObserver) }
+        musicObserver = nil
+    }
+
     private func advance() { page = rotation.next(store) }
+
+    /// For the tests: whether the music bed is playing.
+    var musicIsPlaying: Bool { music.rate > 0 }
 
     /// The crawl's text for its next pass: headlines interleaved, CheerLights in front.
     func crawlText() -> String {
@@ -76,15 +93,18 @@ final class BulletinBoard {
 
     private func start() {
         started = true
+        let refreshMinutes = config.refreshMinutes
+        // The loops hold the board weakly, and only for the length of a call,
+        // never across a sleep, so a board that's let go goes away.
         for (i, feed) in config.feeds.enumerated() {
             loops.append(Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(500 + i * 2000)) // staggered, as board.js does
                 var failures = 0
-                while !Task.isCancelled, let self {
-                    if await self.refresh(feed: feed.id) { failures = 0 } else { failures += 1 }
+                while !Task.isCancelled {
+                    guard let ok = await self?.refresh(feed: feed.id) else { return }
+                    failures = ok ? 0 : failures + 1
                     // Back off 1, 2, 4... minutes after failures, never longer than the normal refresh.
-                    let minutes = failures == 0 ? config.refreshMinutes
-                        : min(config.refreshMinutes, pow(2, Double(failures - 1)))
+                    let minutes = failures == 0 ? refreshMinutes : min(refreshMinutes, pow(2, Double(failures - 1)))
                     try? await Task.sleep(for: .seconds(minutes * 60))
                 }
             })
@@ -115,8 +135,7 @@ final class BulletinBoard {
     private func repeating(every seconds: Double, _ body: @escaping (BulletinBoard) async -> Void) -> Task<Void, Never> {
         Task { [weak self] in
             while !Task.isCancelled {
-                guard let self else { return }
-                await body(self)
+                if let board = self { await body(board) } else { return }
                 try? await Task.sleep(for: .seconds(seconds))
             }
         }
@@ -132,7 +151,7 @@ final class BulletinBoard {
             return
         }
         Task { [weak self] in
-            guard let self, tracks.isEmpty, let urls = try? await client.music(), !urls.isEmpty else { return }
+            guard let self, tracks.isEmpty, let urls = try? await client.music(), !urls.isEmpty, !shut else { return }
             tracks = urls.map(client.mediaURL)
             if config.music.shuffle { tracks.shuffle() }
             musicObserver = NotificationCenter.default.addObserver(

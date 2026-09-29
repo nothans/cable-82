@@ -56,10 +56,12 @@ final class ChannelEngine {
     @ObservationIgnored private var air = 0 // which player is on the air
     private var standby: Int { 1 - air }
     @ObservationIgnored private var cuedIndex: Int? // timeline index the standby holds
+    @ObservationIgnored private var channel: Channel?
+    @ObservationIgnored private var library = Library(files: [])
     @ObservationIgnored private var timeline: [Segment] = []
     @ObservationIgnored private var starts: [Double] = [] // each segment's start within the loop
     @ObservationIgnored private var loopLength = 0.0
-    @ObservationIgnored private var index = -1 // timeline index on the air
+    @ObservationIgnored private(set) var index = -1 // timeline index on the air
     /// Bumped on every start and stop, so async work for an old tune drops out.
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var watches: [ObjectIdentifier: AnyCancellable] = [:]
@@ -68,6 +70,12 @@ final class ChannelEngine {
     @ObservationIgnored private var assets: [URL: AVURLAsset] = [:]
     @ObservationIgnored private var resyncTimer: Timer?
     @ObservationIgnored private var troubleTimer: Timer?
+    @ObservationIgnored private var watchTimer: Timer?
+    /// Sees the endings and stalls the notifications miss (video.js's endWatch).
+    @ObservationIgnored private var endWatch = EndWatch()
+    /// True once the air is running on the clock; the watch only judges it then.
+    @ObservationIgnored private var watching = false
+    @ObservationIgnored private var observers: [NSObjectProtocol] = []
 
     /// Allowed drift from the clock before a resync seeks, as in video.js.
     private let driftTolerance = 1.5
@@ -82,42 +90,60 @@ final class ChannelEngine {
         }
         players[1].isMuted = true
         let center = NotificationCenter.default
-        center.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: nil, queue: .main) { [weak self] n in
-            let item = n.object as? AVPlayerItem
-            MainActor.assumeIsolated { self?.ended(item) }
-        }
-        center.addObserver(forName: AVPlayerItem.failedToPlayToEndTimeNotification, object: nil, queue: .main) { [weak self] n in
-            let item = n.object as? AVPlayerItem
-            MainActor.assumeIsolated { self?.failed(item) }
-        }
+        observers = [
+            center.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: nil, queue: .main) { [weak self] n in
+                let item = n.object as? AVPlayerItem
+                MainActor.assumeIsolated { self?.ended(item) }
+            },
+            center.addObserver(forName: AVPlayerItem.failedToPlayToEndTimeNotification, object: nil, queue: .main) { [weak self] n in
+                let item = n.object as? AVPlayerItem
+                MainActor.assumeIsolated { self?.failed(item) }
+            },
+        ]
+    }
+
+    isolated deinit {
+        stop()
+        observers.forEach(NotificationCenter.default.removeObserver)
     }
 
     /// Put a channel on the air. Every duration in `library` must be known.
     func start(_ channel: Channel, library: Library) {
         stop()
-        timeline = Dial.channelTimeline(channel, files: library.files, spots: library.spots, date: Date())
-        var t = 0.0
-        starts = timeline.map { seg in defer { t += seg.duration ?? 0 }; return t }
-        loopLength = t
+        self.channel = channel
+        self.library = library
+        setTimeline(Dial.channelTimeline(channel, files: library.files, spots: library.spots, date: Date()))
         drive()
         resyncTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.resync() }
         }
+        watchTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.watch() }
+        }
+    }
+
+    private func setTimeline(_ segments: [Segment]) {
+        timeline = segments
+        var t = 0.0
+        starts = timeline.map { seg in defer { t += seg.duration ?? 0 }; return t }
+        loopLength = t
     }
 
     func stop() {
         generation += 1
         resyncTimer?.invalidate()
         troubleTimer?.invalidate()
+        watchTimer?.invalidate()
+        watching = false
         for p in players {
             p.pause()
             p.replaceCurrentItem(with: nil)
         }
         watches.removeAll()
         assets.removeAll()
-        timeline = []
-        starts = []
-        loopLength = 0
+        channel = nil
+        library = Library(files: [])
+        setTimeline([])
         index = -1
         cuedIndex = nil
         trouble = nil
@@ -132,6 +158,7 @@ final class ChannelEngine {
         index = pos.index
         cuedIndex = nil
         trouble = nil
+        watching = false
         let p = players[air]
         p.isMuted = false
         p.volume = volume
@@ -188,6 +215,7 @@ final class ChannelEngine {
         guard let item, item === players[air].currentItem, !timeline.isEmpty else { return }
         let n = (index + 1) % timeline.count
         let s = players[standby]
+        watching = false
         guard cuedIndex == n, s.currentItem?.status == .readyToPlay else {
             log("boundary with nothing cued: cued \(String(describing: cuedIndex)) want \(n), standby status \(s.currentItem?.status.rawValue ?? -1), error \(String(describing: s.currentItem?.error))")
             drive() // nothing cued in time: cold-load from the clock
@@ -205,26 +233,54 @@ final class ChannelEngine {
         cuedIndex = nil
         trouble = nil
         troubleTimer?.invalidate()
+        startWatching()
         cueNext()
     }
 
     /// The clock is the truth: if the air has wandered from it, put it back.
     private func resync() {
+        // A shuffled channel's running order is the day's: at midnight the
+        // browser display picks up the new one, so this set does too.
+        if let channel, let fresh = Playout.timelineChange(channel, library: library, current: timeline, at: Date()) {
+            log("new day's running order")
+            generation += 1 // what's cued belongs to yesterday's order
+            setTimeline(fresh)
+            drive()
+            return
+        }
         guard !timeline.isEmpty, index >= 0, trouble == nil,
               let pos = Dial.positionAt(timeline, at: Date()) else { return }
         let p = players[air]
-        guard p.currentItem?.status == .readyToPlay, p.rate > 0 else { return } // mid-load or mid-cut
+        guard p.currentItem?.status == .readyToPlay, p.rate > 0 else { return } // mid-load or mid-cut; the watch covers a stop
         let seg = timeline[index]
         let onAir = starts[index] + (p.currentTime().seconds - seg.from)
         let clock = starts[pos.index] + pos.offset
-        var drift = (onAir - clock).truncatingRemainder(dividingBy: loopLength)
-        if drift > loopLength / 2 { drift -= loopLength }
-        if drift < -loopLength / 2 { drift += loopLength }
+        let drift = Playout.drift(onAir: onAir, clock: clock, loopLength: loopLength)
         if abs(drift) > 0.05 { log("drift \(fmt(drift))s on \(seg.file)") }
         guard abs(drift) > driftTolerance else { return }
         if pos.index == index {
             lock(p, to: index)
         } else {
+            drive()
+        }
+    }
+
+    /// A few times a second: a notification can go missing, and a player
+    /// can stop without one. A stop at the end mark is the ending; a stop
+    /// anywhere else reloads from the clock.
+    private func watch() {
+        guard watching, trouble == nil, timeline.indices.contains(index) else { return }
+        let p = players[air]
+        guard let item = p.currentItem else { return }
+        let seg = timeline[index]
+        let end = seg.to ?? seg.from + (seg.duration ?? .infinity)
+        switch endWatch.look(time: p.currentTime().seconds, end: end, now: ProcessInfo.processInfo.systemUptime) {
+        case .fine: break
+        case .ended:
+            log("watch: stopped at the end of \(seg.file)")
+            ended(item)
+        case .stalled:
+            log("watch: stalled in \(seg.file); reloading from the clock")
             drive()
         }
     }
@@ -238,6 +294,7 @@ final class ChannelEngine {
             // Stay on the clock: sit out this segment behind a card, and
             // pick the air back up where the next one starts.
             trouble = item.error?.localizedDescription ?? "This program can't be played."
+            watching = false
             players[air].pause()
             let remaining = Dial.positionAt(timeline, at: Date()).map { (timeline[$0.index].duration ?? 5) - $0.offset } ?? 5
             troubleTimer?.invalidate()
@@ -257,18 +314,24 @@ final class ChannelEngine {
         let startAt = Date().addingTimeInterval(0.15)
         guard let pos = Dial.positionAt(timeline, at: startAt), pos.index == i else {
             p.play() // at a boundary: the cut or the next resync sorts it out
+            startWatching()
             return
         }
         p.setRate(1, time: seconds(timeline[i].from + pos.offset), atHostTime: hostTime(at: startAt))
+        startWatching()
+    }
+
+    private func startWatching() {
+        endWatch.reset()
+        watching = true
     }
 
     /// Arrange for segment `n` to start playing when the clock reaches it.
     private func schedule(_ p: AVPlayer, toStart n: Int) {
         let now = Date()
         guard let pos = Dial.positionAt(timeline, at: now) else { return }
-        var delta = (starts[n] - (starts[pos.index] + pos.offset)).truncatingRemainder(dividingBy: loopLength)
-        if delta < 0 { delta += loopLength }
-        if delta > loopLength - driftTolerance { delta -= loopLength } // the clock just passed it
+        let delta = Playout.startDelay(segmentStart: starts[n], clock: starts[pos.index] + pos.offset,
+                                       loopLength: loopLength, tolerance: driftTolerance)
         let from = timeline[n].from
         if delta > 0 {
             p.setRate(1, time: seconds(from), atHostTime: hostTime(at: now.addingTimeInterval(delta)))
@@ -326,6 +389,13 @@ final class ChannelEngine {
     }
 
     private func seconds(_ s: Double) -> CMTime { CMTime(seconds: s, preferredTimescale: 600) }
+
+    // MARK: - What's on the air, for the tests
+
+    var segments: [Segment] { timeline }
+    var airURL: URL? { (players[air].currentItem?.asset as? AVURLAsset)?.url }
+    var airSeconds: Double { players[air].currentTime().seconds }
+    var airIsPlaying: Bool { players[air].rate > 0 }
 
     private func log(_ message: String) {
         #if DEBUG

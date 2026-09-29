@@ -65,6 +65,14 @@ final class Tuner {
 
     func boot() async {
         log("boot")
+        // A reconnect starts from nothing: whatever was on the air goes off
+        // first, so it can't play on behind a card if the station doesn't answer.
+        tuneTask?.cancel()
+        flipTask?.cancel()
+        engine.stop()
+        board?.shutdown()
+        board = nil
+        covering = false
         screen = .connecting
         do {
             let cfg = try await client.config().config
@@ -73,7 +81,7 @@ final class Tuner {
             preview = cfg.preview
             lineup = cfg.dial
             board = BulletinBoard(config: cfg.board, client: client)
-            dial = cfg.dial.filter { $0.type != .external } // no web view on tvOS
+            dial = Dial.tunable(cfg.dial) // no web view on tvOS
             guard !dial.isEmpty else {
                 screen = .trouble("NOTHING THIS SET CAN SHOW IS ON THE DIAL. ADD A CHANNEL IN THE CONTROL ROOM AT \(stationHost)/config")
                 return
@@ -81,7 +89,7 @@ final class Tuner {
             // string(forKey:) reads a stored number or a `-lastChannel 7` launch argument alike.
             let last = UserDefaults.standard.string(forKey: Self.lastChannelKey).flatMap { Int($0) }
             log("last channel \(String(describing: last)), dial \(dial.map(\.number))")
-            tune(to: dial.firstIndex { $0.number == last } ?? 0)
+            tune(to: Dial.startIndex(dial, last: last))
         } catch {
             screen = .trouble("CAN'T REACH THE STATION AT \(stationHost). \(error.localizedDescription.uppercased())")
         }
@@ -159,26 +167,22 @@ final class Tuner {
 
     private func air(_ ch: Channel) async {
         flipTask?.cancel()
-        if ch.type == .guide {
+        let (plan, flipAt) = Playout.plan(ch, at: Date(), hasBoard: board != nil)
+        if let flipAt { scheduleFlip(at: flipAt) }
+        switch plan {
+        case .guide:
             screen = .guide
             await refreshListings()
             return
-        }
-        if ch.type == .bulletin {
+        case .board: // channel 82, or a channel off the air that falls back to it
             screen = .board
             board?.activate()
             return
-        }
-        let state = Dial.airState(ch, at: Date())
-        if let until = state.until { scheduleFlip(at: until) }
-        guard state.onAir else {
-            if ch.offAir == .bulletin, let board { // off the air, the channel falls back to the board
-                screen = .board
-                board.activate()
-            } else {
-                screen = .offAir(ch.offAir, state.resumeText)
-            }
+        case let .offAir(mode, text):
+            screen = .offAir(mode, text)
             return
+        case .video:
+            break
         }
 
         // The folder is the truth and it changes, so every tune re-reads it.
@@ -225,23 +229,18 @@ final class Tuner {
         guard !missing.isEmpty else { return lib }
         screen = .standBy("PLEASE STAND BY\nMEASURING \(missing.count) \(missing.count == 1 ? "PROGRAM" : "PROGRAMS")")
         covering = false // this can take a while; show the card, not static
-        let learned = await DurationProbe.probe(missing.map { client.mediaURL($0.url) })
+        let probed = await DurationProbe.probe(missing.map { client.mediaURL($0.url) })
+        let learned = Dictionary(missing.compactMap { f in probed[client.mediaURL(f.url)].map { (f.url, $0) } },
+                                 uniquingKeysWith: { a, _ in a })
 
         func fill(_ files: [MediaFile], folder: String?) -> [MediaFile] {
-            var report: [String: Double] = [:]
-            let out = files.map { f -> MediaFile in
-                guard f.duration == nil, let d = learned[client.mediaURL(f.url)] else { return f }
-                report[f.file] = d
-                var g = f
-                g.duration = d
-                return g
-            }
-            if let folder, !report.isEmpty {
-                let client = client
+            let filled = Playout.fillDurations(files, learned: learned)
+            if let folder, !filled.report.isEmpty {
+                let client = client, report = filled.report
                 Task.detached { try? await client.postDurations(folder: folder, durations: report) }
             }
-            for f in out where f.duration == nil { print("[cable-tv] can't read \(f.url); leaving it out") }
-            return out.filter { $0.duration != nil }
+            for f in filled.unreadable { print("[cable-tv] can't read \(f.url); leaving it out") }
+            return filled.files
         }
         return Library(files: fill(lib.files, folder: ch.folder), spots: fill(lib.spots, folder: ch.breaks?.folder))
     }
