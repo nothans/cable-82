@@ -8,6 +8,16 @@ on:
   push:
   pull_request:
 
+# The jobs only read the code, so the token can't write to the repo.
+permissions:
+  contents: read
+
+# A new push to a branch or pull request cancels its run still in progress,
+# so superseded macOS jobs don't hold up the queue.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   station:
     name: station (node ${{ matrix.node }})
