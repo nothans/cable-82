@@ -219,6 +219,21 @@ try {
   await tune({ cmd: "power" });
   check("power again brings the picture back on the same channel", await until(async () => !(await visible("#power-off")) && (await visible("#card-layer")), 3000));
 
+  // Jarvis: a line over the bus puts the host on the screen with the words
+  // typed under him, his picture actually drawn, and he leaves by himself.
+  const said = await (await fetch(base + "/api/jarvis", { method: "POST", body: JSON.stringify({ text: "Good evening, E2E 82." }) })).json();
+  check("POST /api/jarvis is accepted and heard by the set", said.ok === true && said.listeners === 1, JSON.stringify(said));
+  check("Jarvis pops up over the channel", await until(() => visible("#jarvis"), 3000));
+  check("his line types out in the caption", await until(async () => (await page.textContent("#jarvis .jv-text")) === "GOOD EVENING, E2E 82.", 5000));
+  check("his picture is drawn, not a blank frame", await page.evaluate(() => {
+    const c = document.querySelector("#jarvis canvas");
+    const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+    const seen = new Set();
+    for (let i = 0; i < d.length; i += 4 * 97) seen.add(d[i] + "," + d[i + 1] + "," + d[i + 2]);
+    return seen.size > 20;
+  }));
+  check("he goes when he is done", await until(async () => !(await visible("#jarvis")), 8000));
+
   // The keyboard: up from 5 wraps to 82 here (or to 82 via 2 -> no, 5 -> 82).
   await page.keyboard.press("ArrowUp");
   check("ArrowUp turns the dial", await until(async () => (await page.textContent("#bug-number")) === "CH 82", 3000));
@@ -358,11 +373,13 @@ try {
   await room.goto(base + "/config");
   check("the control room loads the config", await until(async () => /Loaded/.test(await room.textContent("#status")), 5000));
   const groups = await room.evaluate(() => Array.from(document.querySelectorAll(".group-head")).map((h) => h.textContent));
-  check("the room shows the six groups, quick settings first", groups.join("|") === "Quick settings|Channels|Community Board|Channel Preview|Display|Server", groups.join("|"));
+  check("the room shows the seven groups, quick settings first", groups.join("|") === "Quick settings|Channels|Community Board|Channel Preview|Jarvis|Display|Server", groups.join("|"));
   check("the vitals panel fills in", await until(async () => (await room.locator("#vitals .vital").count()) >= 4, 5000));
   check("the power panel stays hidden off a Pi", await room.evaluate(() => document.getElementById("p-power").hidden));
   check("the room names the channel", (await room.inputValue("#f-channelName")) === "E2E 83");
   check("the room shows ten presses to shut down", (await room.inputValue("#f-tunerShutdown")) === "10");
+  check("the room says whether Jarvis has a voice here", await until(async () => /voice|switched off/i.test(await room.textContent("#jarvisVoiceStatus")), 5000));
+  await room.fill("#f-jarvisName", "e2e host");
   await room.fill("#f-tunerShutdown", "7");
   await room.fill("#f-tagline", "SAVED FROM THE ROOM");
   check("the faux CRT panel shows the sliders with their numbers", await room.evaluate(() => document.getElementById("f-fauxCurve").value === "3" && document.getElementById("o-fauxCurve").value === "3" && !document.getElementById("f-fauxOn").checked));
@@ -374,6 +391,13 @@ try {
   check("the save landed in config.json", savedCfg.tagline === "SAVED FROM THE ROOM");
   check("the faux CRT sliders round-trip through the room", savedCfg.fauxCrt && savedCfg.fauxCrt.curve === 6 && savedCfg.fauxCrt.on === false, JSON.stringify(savedCfg.fauxCrt));
   check("and so do the presses to shut down", savedCfg.tuner.shutdownPresses === 7, JSON.stringify(savedCfg.tuner));
+  check("and Jarvis's name, lettered the station's way", savedCfg.jarvis && savedCfg.jarvis.name === "E2E HOST", JSON.stringify(savedCfg.jarvis));
+  // Try him from the room: the set reloads on the save, then the Time key
+  // puts him on it under the new name.
+  await until(async () => (await (await fetch(base + "/api/tune")).json()).listeners === 1, 8000);
+  await room.click('#p-jarvis-try [data-ask="time"]');
+  check("Try him reports the set that heard him", await until(async () => /^On 1 set: It's /.test(await room.textContent("#jarvisTryOut")), 5000), await room.textContent("#jarvisTryOut"));
+  check("and the set shows him under his new name", await until(async () => (await visible("#jarvis")) && (await page.textContent("#jarvis .jv-flag")) === "E2E HOST", 5000));
   await room.close();
 
   // The remote.

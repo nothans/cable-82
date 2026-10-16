@@ -16,6 +16,7 @@ Features:
 - **CABLEVUE** - the guide on channel 0: what is on every channel now and next, half hour by half hour, crawling when the lineup is long.
 - **Channels on any drive** - a `channels` folder on a USB stick or a network share joins the dial. A 16 GB card fills up fast; a stick does not.
 - **External channels** - any web page as a channel. A retro weather app makes a fine weather channel.
+- **Jarvis, the on-screen host** - a 1980s computer-generated head who cuts in over the channel to say a line or answer a question (the weather, the CheerLights color, the time, a joke), out loud when the machine has a voice. Anything that can send a web request can put him on the air.
 - **Tuning from anything** - the keyboard, a USB gamepad, an HTTP call, or the **remote control** at `/remote-control` on your phone: channel up, channel down, volume, power.
 - **An on-screen display** the way a cable box drew one: the channel on every tune, the volume as a meter of cells, centered in the picture on a dark plate.
 - **The control room** at `/config` - everything, one page, one Save. The set picks the change up at once.
@@ -200,12 +201,33 @@ Turn it off, or make the message yours, in the control room - or in `config.json
 }
 ```
 
+### Jarvis
+
+Jarvis is the station's host.
+Send him a line or a question and he cuts in over whatever is on.
+He is a low-poly head in shades on a backdrop of turning neon, jerking between poses and tearing like a weak signal, with his line typing out underneath.
+His mouth is an oscilloscope trace of his own voice, so it moves with every word.
+The channel's sound steps down while he talks, and when he is done he rolls back out.
+
+![Jarvis on the CABLE 82 Raspberry Pi, answering the weather](images/jarvis.png)
+
+```bash
+curl -X POST http://cable82.local:1982/api/jarvis -d '{"text":"Good evening, and welcome to CABLE 82."}'
+curl -X POST http://cable82.local:1982/api/jarvis -d '{"ask":"weather"}'
+```
+
+He answers `weather`, `cheerlights`, `time`, and `joke` from what the station already knows, and reads out whatever you send him as `text`.
+His voice is [espeak-ng](https://github.com/espeak-ng/espeak-ng): `sudo apt install espeak-ng` on a Pi.
+Without it he still appears and talks with a drawn mouth.
+His name, his voice, its speed and pitch, and a box to try him live are in the control room's **Jarvis** group.
+The whole API is in [docs/api.md](docs/api.md#jarvis), and [examples/jarvis](examples/jarvis) has him called from the shell, Python, Node, and Home Assistant.
+
 ## Configuration and the API
 
 Everything the control room edits lives in `config.json`, and you can hand-edit it just as well; the server picks the change up without a restart.
 The keys, their ranges, and their defaults are in **[docs/config.md](docs/config.md)**.
 
-Everything the display, the control room, and the remote talk to is in **[docs/api.md](docs/api.md)**: the tuner bus, the settings API and its guards, the channels inventory, the feed and weather proxies, the machine's vitals, the version and power endpoints, and the command line.
+Everything the display, the control room, and the remote talk to is in **[docs/api.md](docs/api.md)**: the tuner bus, the settings API and its guards, the channels inventory, the feed and weather proxies, Jarvis, the machine's vitals, the version and power endpoints, and the command line.
 
 Feeds are fetched by the server, never by the browser, and only URLs listed in `config.json` can be fetched at all.
 If a feed goes down, the channel keeps running on the last good copy.

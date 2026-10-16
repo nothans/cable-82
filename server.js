@@ -36,7 +36,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { pipeline } = require("node:stream");
-const { execFileSync } = require("node:child_process");
+const { execFile, execFileSync } = require("node:child_process");
 const SCHEMA = require("./config-schema.js");
 const { readMp4Title } = require("./media-meta.js");
 
@@ -48,7 +48,7 @@ const ROOT = __dirname;
 // files by itself. Nobody has to touch the TV.
 const DISPLAY_FILES = [
   "index.html", "style.css", "config-schema.js",
-  "dial.js", "board.js", "guide.js", "video.js", "set.js", "tuner.js", "app.js",
+  "dial.js", "board.js", "guide.js", "video.js", "set.js", "tuner.js", "jarvis.js", "app.js",
 ];
 function displayBuild() {
   const h = crypto.createHash("sha1");
@@ -331,6 +331,12 @@ function createApp(opts = {}) {
       geocodeApiBase: "https://geocoding-api.open-meteo.com/v1/search",
       // CheerLights (cheerlights.com): the latest global color, one JSON fetch.
       cheerlightsApiBase: "https://api.thingspeak.com/channels/1417/feeds/last.json",
+      // Jarvis speaks through espeak-ng when it is installed. null, or a
+      // program that is not there, leaves Jarvis on screen without a voice.
+      espeak: "espeak-ng",
+      // Set by tests to stand in for espeak-ng: (line, jarvisConfig) ->
+      // Promise of a WAV buffer, or of null for no voice.
+      speak: null,
     },
     opts
   );
@@ -514,12 +520,15 @@ function createApp(opts = {}) {
   // Fetch current conditions + today's hi/lo/sun for the configured location,
   // normalized to a small shape the display renders. Serves the last good
   // copy if a refresh fails, same as the feed proxy.
-  async function handleWeather(res) {
+  // The current weather for the configured place, or a cached copy when the
+  // service is down. Throws with .status 503 when no place is set and 502
+  // when nothing is available at all.
+  async function currentWeather() {
     const cfg = loadConfig();
     const w = cfg && cfg.weather;
     const loc = w && w.location;
     if (!loc || !Number.isFinite(loc.latitude) || !Number.isFinite(loc.longitude)) {
-      return send(res, 503, "NO WEATHER LOCATION SET");
+      throw Object.assign(new Error("NO WEATHER LOCATION SET"), { status: 503 });
     }
     const tempParam = w.tempUnit === "C" ? "celsius" : "fahrenheit";
     const windParam = w.windUnit === "kmh" ? "kmh" : "mph";
@@ -554,24 +563,33 @@ function createApp(opts = {}) {
         sunset: first(daily.sunset),
       };
       weatherCache = out;
-      res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-      res.end(JSON.stringify(out));
+      return { data: out, stale: false };
     } catch (e) {
-      if (weatherCache) {
-        res.writeHead(200, { "content-type": "application/json; charset=utf-8", "x-cable82-stale": "1" });
-        return res.end(JSON.stringify(weatherCache));
-      }
-      send(res, 502, "WEATHER UNAVAILABLE: " + e.message);
+      if (weatherCache) return { data: weatherCache, stale: true };
+      throw Object.assign(new Error("WEATHER UNAVAILABLE: " + e.message), { status: 502 });
+    }
+  }
+
+  async function handleWeather(res) {
+    try {
+      const { data, stale } = await currentWeather();
+      res.writeHead(200, Object.assign(
+        { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+        stale ? { "x-cable82-stale": "1" } : {}
+      ));
+      res.end(JSON.stringify(data));
+    } catch (e) {
+      send(res, e.status || 502, e.message);
     }
   }
 
   // The latest CheerLights color (cheerlights.com): one global color anyone
   // in the world can set. Fetched server-side like everything else, last
   // good copy kept so a blip never blanks the ticker item.
-  async function handleCheerlights(res) {
+  async function currentCheerlights() {
     const cfg = loadConfig();
     if (!cfg || !cfg.cheerlights || !cfg.cheerlights.enabled) {
-      return send(res, 503, "CHEERLIGHTS NOT ENABLED");
+      throw Object.assign(new Error("CHEERLIGHTS NOT ENABLED"), { status: 503 });
     }
     try {
       const got = await fetchWithCap(o.cheerlightsApiBase, o.upstreamTimeoutMs, o.maxFeedBytes);
@@ -581,14 +599,23 @@ function createApp(opts = {}) {
       // The name is all the crawl uses: it scrolls the word, not a swatch.
       const out = { color };
       cheerCache = out;
-      res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-      res.end(JSON.stringify(out));
+      return { data: out, stale: false };
     } catch (e) {
-      if (cheerCache) {
-        res.writeHead(200, { "content-type": "application/json; charset=utf-8", "x-cable82-stale": "1" });
-        return res.end(JSON.stringify(cheerCache));
-      }
-      send(res, 502, "CHEERLIGHTS UNAVAILABLE: " + e.message);
+      if (cheerCache) return { data: cheerCache, stale: true };
+      throw Object.assign(new Error("CHEERLIGHTS UNAVAILABLE: " + e.message), { status: 502 });
+    }
+  }
+
+  async function handleCheerlights(res) {
+    try {
+      const { data, stale } = await currentCheerlights();
+      res.writeHead(200, Object.assign(
+        { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+        stale ? { "x-cable82-stale": "1" } : {}
+      ));
+      res.end(JSON.stringify(data));
+    } catch (e) {
+      send(res, e.status || 502, e.message);
     }
   }
 
@@ -911,6 +938,161 @@ function createApp(opts = {}) {
       .catch(() => send(res, 413, "BODY TOO LARGE"));
   }
 
+  // ---------------- Jarvis (the on-screen host)
+
+  // POST /api/jarvis puts Jarvis on the screen to say one line: either the
+  // words given ({text}) or an answer the station writes from what it
+  // already knows ({ask: "weather" | "cheerlights"}). The line rides the
+  // bus as a `jarvis` event; when espeak-ng is installed the server also
+  // renders it to a WAV the display plays and moves the mouth to. Only the
+  // last few clips are kept, in memory. `voice` in the reply says a voice
+  // was asked for; the clip itself 404s if it could not be made, and the
+  // display then speaks with the drawn mouth instead.
+  let jarvisSeq = 0;
+  const jarvisClips = new Map();
+  // The questions Jarvis answers from what the station already knows.
+  const JARVIS_ASKS = ["weather", "cheerlights", "time", "joke"];
+  const JARVIS_MAX = 240;
+
+  function jarvisLine(text) {
+    return String(text).replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, JARVIS_MAX);
+  }
+
+  async function jarvisAnswer(ask) {
+    if (ask === "weather") {
+      const { data: w } = await currentWeather();
+      const where = w.name ? " in " + w.name : "";
+      const unit = w.tempUnit === "C" ? "Celsius" : "degrees";
+      let line = "It's " + w.tempNow + " " + unit + " and " + String(w.condition || "").toLowerCase() + where + ".";
+      if (Number.isFinite(w.tempHi) && Number.isFinite(w.tempLo)) line += " High of " + w.tempHi + ", low of " + w.tempLo + ".";
+      return line;
+    }
+    if (ask === "cheerlights") {
+      const { data: c } = await currentCheerlights();
+      return "CheerLights is " + c.color + " right now.";
+    }
+    const cfg = loadConfig() || {};
+    if (ask === "time") {
+      // In the station's own clock format, and the weather place's time
+      // zone when one is set (the set's clock follows the machine's).
+      const zone = cfg.weather && cfg.weather.location && cfg.weather.location.timezone;
+      const fmt = (tz) =>
+        new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: cfg.timeFormat !== "24h", ...(tz ? { timeZone: tz } : {}) });
+      let now;
+      try {
+        now = fmt(zone);
+      } catch (e) {
+        now = fmt(null);
+      }
+      return "It's " + now + ".";
+    }
+    // joke: one from the board's own deck.
+    const deck = Array.isArray(cfg.dadJokes) ? cfg.dadJokes : [];
+    if (!deck.length) throw Object.assign(new Error("NO JOKES IN THE DECK"), { status: 503 });
+    return deck[Math.floor(Math.random() * deck.length)];
+  }
+
+  // Whether espeak-ng is installed: asked once, and again at most once a
+  // minute while it is missing, so installing it needs no restart.
+  let espeakFound = null;
+  let espeakAskedAt = 0;
+  function espeakInstalled() {
+    if (!o.espeak) return false;
+    if (espeakFound || (espeakFound === false && Date.now() - espeakAskedAt < 60000)) return espeakFound;
+    espeakAskedAt = Date.now();
+    try {
+      execFileSync(o.espeak, ["--version"], { timeout: 3000, stdio: "ignore" });
+      espeakFound = true;
+    } catch (e) {
+      espeakFound = false;
+    }
+    return espeakFound;
+  }
+
+  // Whether a line will be spoken: the config wants a voice and there is
+  // something to speak with.
+  function jarvisVoiced() {
+    const cfg = loadConfig();
+    const j = (cfg && cfg.jarvis) || {};
+    return j.voice !== false && Boolean(o.speak || espeakInstalled());
+  }
+
+  // The line as speech, or null when it cannot be made. Never throws.
+  function jarvisSpeech(line) {
+    const cfg = loadConfig();
+    const j = (cfg && cfg.jarvis) || {};
+    if (o.speak) return Promise.resolve().then(() => o.speak(line, j)).catch(() => null);
+    const args = ["-v", j.espeakVoice || "en-us+m3", "-s", String(j.speed || 150), "-p", String(j.pitch || 38), "--stdout", line];
+    return new Promise((resolve) => {
+      execFile(o.espeak, args, { encoding: "buffer", timeout: 10000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => {
+        resolve(err || !stdout || stdout.length < 44 ? null : stdout);
+      });
+    });
+  }
+
+  function handleJarvis(req, res) {
+    const cfg = loadConfig();
+    const j = (cfg && cfg.jarvis) || {};
+    // GET says what he can do, so a caller can find out without the docs.
+    if (req.method === "GET") {
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+      return res.end(JSON.stringify({
+        enabled: Boolean(j.enabled),
+        name: j.name || "JARVIS",
+        voice: Boolean(j.enabled) && jarvisVoiced(),
+        asks: JARVIS_ASKS,
+        maxText: JARVIS_MAX,
+        listeners: sseClients.size,
+      }));
+    }
+    if (req.method !== "POST") return send405(res, "GET, POST");
+    if (!j.enabled) return send(res, 403, "JARVIS IS SWITCHED OFF");
+    readBody(req, 4096)
+      .then(async (body) => {
+        let raw;
+        try {
+          raw = JSON.parse(body);
+        } catch (e) {
+          return send(res, 400, "INVALID JSON");
+        }
+        let line;
+        if (raw && raw.ask !== undefined) {
+          if (!JARVIS_ASKS.includes(raw.ask)) return send(res, 400, "ASK MUST BE ONE OF " + JARVIS_ASKS.join(", "));
+          try {
+            line = await jarvisAnswer(raw.ask);
+          } catch (e) {
+            return send(res, e.status || 502, e.message);
+          }
+        } else if (raw && typeof raw.text === "string" && jarvisLine(raw.text)) {
+          line = jarvisLine(raw.text);
+        } else {
+          return send(res, 400, "SEND {text} OR {ask}");
+        }
+        // The set hears the line at once; the voice renders meanwhile (espeak-ng
+        // takes most of a second on a Pi 3) and its URL waits for it, so
+        // Jarvis is on the screen before he can speak, not after.
+        const seq = ++jarvisSeq;
+        const voiced = jarvisVoiced();
+        if (voiced) {
+          jarvisClips.set(seq, jarvisSpeech(line));
+          for (const old of jarvisClips.keys()) if (old <= seq - 6) jarvisClips.delete(old);
+        }
+        const evt = { seq, name: j.name || "JARVIS", text: line, audio: voiced ? "api/jarvis/" + seq + ".wav" : null };
+        sseBroadcast("jarvis", evt);
+        res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ ok: true, seq, text: line, voice: voiced, listeners: sseClients.size }));
+      })
+      .catch(() => send(res, 413, "BODY TOO LARGE"));
+  }
+
+  async function handleJarvisClip(seq, res) {
+    const pending = jarvisClips.get(seq);
+    const wav = pending && (await pending);
+    if (!wav) return send(res, 404, "NO SUCH CLIP");
+    res.writeHead(200, { "content-type": "audio/wav", "content-length": wav.length, "cache-control": "no-store" });
+    res.end(wav);
+  }
+
   // GET /api/events: the display's ear. Server-Sent Events - plain HTTP,
   // no dependency, and the browser reconnects by itself, which matters on a
   // box that runs for weeks. A comment ping every 25s keeps middleboxes from
@@ -1222,6 +1404,13 @@ function createApp(opts = {}) {
       if (pathname === "/api/tune") {
         handleTune(req, res);
         return;
+      }
+      if (pathname === "/api/jarvis") {
+        return handleJarvis(req, res);
+      }
+      const clip = pathname.match(/^\/api\/jarvis\/(\d+)\.wav$/);
+      if (clip) {
+        return handleJarvisClip(Number(clip[1]), res);
       }
       if (pathname === "/api/events") {
         handleEvents(req, res);

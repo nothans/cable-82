@@ -1,0 +1,37 @@
+# Jarvis from Home Assistant.
+#
+# 1. Add the rest_command to configuration.yaml (change the address to your
+#    station's) and restart Home Assistant.
+# 2. Call it from any automation, script, or dashboard button as
+#    rest_command.cable82_jarvis with either `text` or `ask`.
+
+rest_command:
+  cable82_jarvis:
+    url: "http://cable82.local:1982/api/jarvis"
+    method: POST
+    content_type: "application/json"
+    payload: >-
+      {% if ask is defined %}{{ {"ask": ask} | to_json }}{% else %}{{ {"text": text} | to_json }}{% endif %}
+
+# An automation: Jarvis announces the front door on the TV.
+# Change binary_sensor.front_door to your own door sensor.
+automation:
+  - alias: "Jarvis announces the front door"
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.front_door
+        to: "on"
+    actions:
+      - action: rest_command.cable82_jarvis
+        data:
+          text: "Someone is at the front door."
+
+# A dashboard button that asks him the weather:
+#
+#   type: button
+#   name: Jarvis, weather
+#   tap_action:
+#     action: perform-action
+#     perform_action: rest_command.cable82_jarvis
+#     data:
+#       ask: weather

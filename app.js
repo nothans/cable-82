@@ -70,6 +70,9 @@
   // puts the program back. A save while connected arrives as `config`.
   function startBus(tuner, bootVersion) {
     let lastSeq = 0;
+    // Jarvis has his own sequence and needs no tuner. A server that restarted
+    // counts from 1 again and replays nothing, so each hello starts it fresh.
+    let lastJarvis = 0;
     let bootBuild = null;
     let es;
     try {
@@ -81,6 +84,7 @@
       let hello;
       try { hello = JSON.parse(ev.data); } catch (e) { return; }
       lastSeq = hello.seq || 0;
+      lastJarvis = 0;
       if (hello.build) {
         if (bootBuild == null) bootBuild = hello.build;
         else if (hello.build !== bootBuild) location.reload();
@@ -93,6 +97,13 @@
       if (!evt || !(evt.seq > lastSeq)) return;
       lastSeq = evt.seq;
       tuner.command(evt.cmd, evt.channel);
+    });
+    es.addEventListener("jarvis", (ev) => {
+      let evt;
+      try { evt = JSON.parse(ev.data); } catch (e) { return; }
+      if (!evt || !(evt.seq > lastJarvis) || !window.Cable82Jarvis) return;
+      lastJarvis = evt.seq;
+      window.Cable82Jarvis.say(evt);
     });
     es.addEventListener("config", () => location.reload());
   }

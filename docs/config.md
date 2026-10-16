@@ -97,6 +97,12 @@ A `guide` channel takes its settings from `preview` below.
 | `music.volume` | 0 to 100 | `60` |
 | `cheerlights.enabled` | The latest CheerLights color as a crawl item | `true` |
 | `cheerlights.template` | `{color}` becomes the color name | `THE WORLD IS SET TO {COLOR}` |
+| `jarvis.enabled` | Jarvis, the on-screen host (`POST /api/jarvis`) | `true` |
+| `jarvis.name` | The name on his caption flag, up to 16 characters | `JARVIS` |
+| `jarvis.voice` | Speak his lines through espeak-ng when it is installed | `true` |
+| `jarvis.espeakVoice` | The espeak-ng voice | `en-us+m3` |
+| `jarvis.speed` | Words a minute, 80 to 260 | `150` |
+| `jarvis.pitch` | 0 to 99 | `38` |
 | `colors.pageCycle` | The palette pages cycle through when a message has no color | blue, green, red, cyan |
 | `colors.headerBg`, `colors.crawlBg` | The header and crawl bands | `blue`, `ink` |
 

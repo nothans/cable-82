@@ -585,6 +585,20 @@
     $("f-cheerEnabled").checked = cheer.enabled !== false;
     $("f-cheerTemplate").value = cheer.template || "THE WORLD IS SET TO {COLOR}";
 
+    const jarvis = cfg.jarvis || {};
+    $("f-jarvisEnabled").checked = jarvis.enabled !== false;
+    $("f-jarvisName").value = jarvis.name || "JARVIS";
+    $("f-jarvisVoice").checked = jarvis.voice !== false;
+    const voiceSel = $("f-jarvisEspeakVoice");
+    const voice = jarvis.espeakVoice || "en-us+m3";
+    // A voice set by hand in config.json stays selectable.
+    if (![...voiceSel.options].some((o) => o.value === voice)) voiceSel.add(new Option(voice + " (from config.json)", voice));
+    voiceSel.value = voice;
+    $("f-jarvisSpeed").value = jarvis.speed != null ? jarvis.speed : 150;
+    $("f-jarvisPitch").value = jarvis.pitch != null ? jarvis.pitch : 38;
+    updateJarvisOut();
+    renderJarvisStatus();
+
     feeds = (cfg.feeds || []).map((f) => ({ id: f.id, label: f.label, url: f.url }));
     rotation = (cfg.rotation || []).map((s) => (s.type === "headlines" ? { type: "headlines", feed: s.feed } : { type: s.type }));
     messages = (cfg.messages || []).map((m) => ({ text: m.text, color: m.color || null }));
@@ -696,6 +710,51 @@
 
   function updateVolumeOut() {
     $("musicVolumeOut").textContent = $("f-musicVolume").value + "%";
+  }
+
+  function updateJarvisOut() {
+    $("jarvisSpeedOut").textContent = $("f-jarvisSpeed").value;
+    $("jarvisPitchOut").textContent = $("f-jarvisPitch").value;
+  }
+
+  // Whether this machine can give him a voice, from GET /api/jarvis.
+  async function renderJarvisStatus() {
+    const out = $("jarvisVoiceStatus");
+    try {
+      const r = await fetch("api/jarvis", { cache: "no-store" });
+      const about = await r.json();
+      out.textContent = !about.enabled
+        ? "He is switched off."
+        : about.voice
+          ? "This machine has a voice for him."
+          : "No voice on this machine right now.";
+    } catch (e) {
+      out.textContent = "";
+    }
+  }
+
+  // The Try him buttons: one line or one question, straight to the sets.
+  async function jarvisTry(body) {
+    const out = $("jarvisTryOut");
+    out.textContent = "Sending...";
+    try {
+      const r = await fetch("api/jarvis", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const text = await r.text();
+      if (!r.ok) {
+        out.textContent = text;
+        return;
+      }
+      const said = JSON.parse(text);
+      out.textContent = said.listeners
+        ? "On " + said.listeners + (said.listeners === 1 ? " set" : " sets") + ": " + said.text
+        : "No set is listening. " + said.text;
+    } catch (e) {
+      out.textContent = "Could not reach the station.";
+    }
   }
 
   async function renderTrackList() {
@@ -835,6 +894,14 @@
       cheerlights: {
         enabled: $("f-cheerEnabled").checked,
         template: $("f-cheerTemplate").value,
+      },
+      jarvis: {
+        enabled: $("f-jarvisEnabled").checked,
+        name: $("f-jarvisName").value.trim(),
+        voice: $("f-jarvisVoice").checked,
+        espeakVoice: $("f-jarvisEspeakVoice").value,
+        speed: Number($("f-jarvisSpeed").value),
+        pitch: Number($("f-jarvisPitch").value),
       },
       channels: channels.map((c) => JSON.parse(JSON.stringify(c))),
       preview: {
@@ -1128,6 +1195,19 @@
     $("wxLookup").addEventListener("click", lookupWx);
     $("wxSearch").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); lookupWx(); } });
     $("f-musicVolume").addEventListener("input", updateVolumeOut);
+    $("f-jarvisSpeed").addEventListener("input", updateJarvisOut);
+    $("f-jarvisPitch").addEventListener("input", updateJarvisOut);
+    $("jarvisSayBtn").addEventListener("click", () => {
+      const text = $("f-jarvisSay").value.trim();
+      if (text) jarvisTry({ text });
+      else $("jarvisTryOut").textContent = "Write a line first.";
+    });
+    $("f-jarvisSay").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") $("jarvisSayBtn").click();
+    });
+    for (const b of document.querySelectorAll("#p-jarvis-try [data-ask]")) {
+      b.addEventListener("click", () => jarvisTry({ ask: b.dataset.ask }));
+    }
     wireFauxSliders();
     wireGroupNav();
     loadVersion();

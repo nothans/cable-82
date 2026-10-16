@@ -49,6 +49,7 @@ Plain HTTP, no library, and the browser reconnects by itself.
 | `hello` | `{"seq":N,"build":"…","config":"…"}` | Sent on connect and on every reconnect. `build` is a hash of the display files, `config` the version of `config.json`. A display that reconnects and finds either one changed reloads itself: that is how `git pull` and a hand edit during a restart reach the set with nobody touching it |
 | `tune` | `{"seq":N,"cmd":"…","channel":N}` | A command from the bus. Apply each `seq` once |
 | `config` | `{"version":"…"}` | A control-room save. The display reloads on it |
+| `jarvis` | `{"seq":N,"name":"…","text":"…","audio":"api/jarvis/N.wav"}` | A line for Jarvis to say on screen; see [The jarvis event](#the-jarvis-event) |
 
 A comment line (`: ping`) goes out every 25 seconds so middleboxes keep the stream open.
 
@@ -107,6 +108,80 @@ Dotfiles (the caches) and anything above the checkout are never served.
 | `GET /api/geocode?q=<place>` | Up to five matches for a place name, each with `name`, `admin1`, `country`, `latitude`, `longitude`, `timezone`, for the control room's location search |
 | `GET /api/cheerlights` | `{"color":"purple"}`, the latest [CheerLights](https://cheerlights.com) color name; `503` while CheerLights is switched off |
 | `GET /api/music` | `{"tracks":[{"file":"…","url":"music/…"}]}`: the audio files in `music/`, in order |
+
+## Jarvis
+
+Jarvis is the station's on-screen host: a 1980s computer-generated head who cuts in over whatever is on, says one line, and goes.
+His mouth is an oscilloscope trace of his own voice.
+Anything that can send a web request can put him on the air: a script, a voice assistant, a button, Home Assistant.
+[examples/jarvis](../examples/jarvis) has callers ready to copy.
+
+### `GET /api/jarvis`
+
+What he can do right now, so a caller can find out without reading this page.
+
+```json
+{"enabled":true,"name":"JARVIS","voice":true,"asks":["weather","cheerlights","time","joke"],"maxText":240,"listeners":1}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `enabled` | He is on the air (`jarvis.enabled`) |
+| `name` | The name on his caption flag (`jarvis.name`) |
+| `voice` | His lines will be spoken: speech is on (`jarvis.voice`) and espeak-ng is installed |
+| `asks` | The questions `POST` answers |
+| `maxText` | The longest line he says, in characters; longer text is cut there |
+| `listeners` | How many sets are listening. `0` means nobody will see him |
+
+It answers while he is switched off too, with `enabled: false`.
+
+### `POST /api/jarvis`
+
+One line, in either of two forms.
+
+| Body | He says |
+| --- | --- |
+| `{"text":"Good evening."}` | The text, cleaned of control characters and cut to `maxText` |
+| `{"ask":"weather"}` | `It's 67 degrees and clear in Boston, Massachusetts. High of 68, low of 45.`, from the station's weather and its units |
+| `{"ask":"cheerlights"}` | `CheerLights is yellow right now.` |
+| `{"ask":"time"}` | `It's 4:12 PM.`, in the station's clock format and the weather place's time zone |
+| `{"ask":"joke"}` | One of the board's dad jokes, at random |
+
+The reply comes at once:
+
+```json
+{"ok":true,"seq":7,"text":"CheerLights is yellow right now.","voice":true,"listeners":1}
+```
+
+`voice` says the line will be spoken.
+The set gets the line straight away as a `jarvis` event on [the bus](#get-apievents), and he appears while his voice is still rendering (most of a second on a Pi 3); his caption starts typing with his first word.
+The channel's sound drops to a fifth while he talks.
+Lines that arrive while he is talking wait their turn, up to three; more than that are dropped.
+
+| Status | Why |
+| --- | --- |
+| `400` | Not JSON, no `text` or `ask`, an empty `text`, or an `ask` that is not in `asks` |
+| `403` | He is switched off (`jarvis.enabled`) |
+| `413` | A body over 4 KB |
+| `502` | `weather` or `cheerlights` and the source is down with no copy kept yet |
+| `503` | `weather` with no location set, `cheerlights` switched off, or `joke` with an empty deck |
+
+His voice is [espeak-ng](https://github.com/espeak-ng/espeak-ng) (`sudo apt install espeak-ng` on a Pi).
+The station checks for it once and again every minute while it is missing, so installing it needs no restart.
+Without it, `voice` is `false` and he says the line with a drawn mouth at reading pace.
+His name, voice, speed, and pitch are in the control room's Jarvis group and in [`config.json`](config.md).
+
+### The `jarvis` event
+
+`{"seq":N,"name":"JARVIS","text":"…","audio":"api/jarvis/N.wav"}` on `GET /api/events`.
+`audio` is `null` when the line has no voice.
+Jarvis keeps his own `seq`, which starts again at 1 when the server restarts; a display applies each `seq` once and starts counting again on every `hello`.
+
+### `GET /api/jarvis/<seq>.wav`
+
+The voice for one line, as a WAV.
+The station keeps the last six.
+The request waits while the clip is still rendering, and gets `404` when it could not be made or is gone.
 
 ## The machine
 

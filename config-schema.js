@@ -254,6 +254,18 @@
       enabled: true,
       template: "THE WORLD IS SET TO {COLOR}",
     },
+    // Jarvis: the on-screen host that pops up to say one line, sent over
+    // POST /api/jarvis. name is the word on his caption flag. voice speaks
+    // the line through espeak-ng when the machine has it; espeakVoice, speed
+    // (words a minute) and pitch shape the voice.
+    jarvis: {
+      enabled: true,
+      name: "JARVIS",
+      voice: true,
+      espeakVoice: "en-us+m3",
+      speed: 150,
+      pitch: 38,
+    },
     colors: {
       pageCycle: ["blue", "green", "red", "cyan"],
       headerBg: "blue",
@@ -640,6 +652,20 @@
         typeof rawCheer.template === "string" && rawCheer.template.trim()
           ? sanitize(rawCheer.template, 120)
           : "THE WORLD IS SET TO {COLOR}",
+    };
+
+    const rawJarvis = raw.jarvis && typeof raw.jarvis === "object" ? raw.jarvis : {};
+    cfg.jarvis = {
+      enabled: typeof rawJarvis.enabled === "boolean" ? rawJarvis.enabled : true,
+      // The name on his caption flag, as the station would letter it.
+      name: (sanitize(typeof rawJarvis.name === "string" ? rawJarvis.name : "", 16).toUpperCase().trim()) || "JARVIS",
+      voice: typeof rawJarvis.voice === "boolean" ? rawJarvis.voice : true,
+      espeakVoice:
+        typeof rawJarvis.espeakVoice === "string" && /^[a-z0-9+_-]{1,40}$/i.test(rawJarvis.espeakVoice)
+          ? rawJarvis.espeakVoice
+          : "en-us+m3",
+      speed: Math.round(clampNum(rawJarvis.speed, 80, 260, 150)),
+      pitch: Math.round(clampNum(rawJarvis.pitch, 0, 99, 38)),
     };
 
     cfg.feeds = (Array.isArray(raw.feeds) ? raw.feeds : [])

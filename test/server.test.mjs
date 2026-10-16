@@ -935,7 +935,7 @@ test("schema writes exactly the keys the README documents, nothing vestigial", (
   const cfg = validateConfig(DEFAULT_CONFIG).cfg;
   assert.deepEqual(Object.keys(cfg).sort(), [
     "channelName", "channels", "cheerlights", "colors", "crawl", "crtInkText", "crtMode", "dadJokes",
-    "dailyReloadHour", "facts", "fauxCrt", "feeds", "maxItemsPerFeed", "messages", "music", "overscanX", "overscanY",
+    "dailyReloadHour", "facts", "fauxCrt", "feeds", "jarvis", "maxItemsPerFeed", "messages", "music", "overscanX", "overscanY",
     "pageSeconds", "port", "preview", "refreshMinutes", "rotation", "tagline", "textScale", "timeFormat",
     "tuner", "weather",
   ]);
@@ -1273,4 +1273,159 @@ test("GET /api/channels carries a programmed channel's spots with their cached d
   assert.equal(ninety.breaks, undefined); // a plain channel stays plain
   assert.ok(j.folders.some((f) => f.folder === "spots" && f.files === 2)); // the picker sees the spots folder too
   writeConfig(configFor(upstreamPort), 12);
+});
+
+// ---------- jarvis ----------
+
+// Listen on the bus and collect events until `stop()`.
+async function listenBus() {
+  const events = [];
+  const req = await new Promise((resolve, reject) => {
+    const r = http.get(base + "/api/events", (res) => {
+      let buf = "";
+      res.on("data", (c) => {
+        buf += c;
+        let idx;
+        while ((idx = buf.indexOf("\n\n")) >= 0) {
+          const chunk = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          const ev = /event: (\S+)/.exec(chunk);
+          const data = /data: (.*)/.exec(chunk);
+          if (ev && data) events.push({ event: ev[1], data: JSON.parse(data[1]) });
+        }
+      });
+      resolve(r);
+    });
+    r.on("error", reject);
+  });
+  await new Promise((r) => setTimeout(r, 100));
+  return { events, stop: () => req.destroy() };
+}
+
+const jarvisPost = (body) => fetch(base + "/api/jarvis", { method: "POST", body: JSON.stringify(body) });
+
+test("POST /api/jarvis puts a line on the bus, cleaned and capped", async () => {
+  const upstreamPort = upstream.address().port;
+  writeConfig(configFor(upstreamPort), 11);
+  const bus = await listenBus();
+  const r = await jarvisPost({ text: "  Good\tevening,\u0007 CABLE 82.  " });
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(j.text, "Good evening, CABLE 82.");
+  const long = await (await jarvisPost({ text: "x".repeat(500) })).json();
+  assert.equal(long.text.length, 240);
+  await new Promise((res) => setTimeout(res, 150));
+  bus.stop();
+  const said = bus.events.filter((e) => e.event === "jarvis");
+  assert.equal(said.length, 2);
+  assert.equal(said[0].data.seq, j.seq);
+  assert.equal(said[0].data.text, "Good evening, CABLE 82.");
+  assert.ok(said[1].data.seq > said[0].data.seq);
+});
+
+test("POST /api/jarvis answers the weather and CheerLights from what the station knows", async () => {
+  const upstreamPort = upstream.address().port;
+  const cfg = configFor(upstreamPort);
+  cfg.weather = { location: { name: "Boston, MA", latitude: 42.36, longitude: -71.06, timezone: "America/New_York" }, tempUnit: "F", windUnit: "mph" };
+  cfg.cheerlights = { enabled: true };
+  writeConfig(cfg, 12);
+  const wx = await (await jarvisPost({ ask: "weather" })).json();
+  assert.equal(wx.text, "It's 72 degrees and partly cloudy in Boston, MA. High of 78, low of 61.");
+  const cheer = await (await jarvisPost({ ask: "cheerlights" })).json();
+  assert.equal(cheer.text, "CheerLights is purple right now.");
+});
+
+test("POST /api/jarvis refuses what it cannot say, and stays quiet when switched off", async () => {
+  const upstreamPort = upstream.address().port;
+  const cfg = configFor(upstreamPort);
+  writeConfig(cfg, 13);
+  assert.equal((await jarvisPost({ ask: "stocks" })).status, 400);
+  assert.equal((await jarvisPost({ text: "   " })).status, 400);
+  assert.equal((await jarvisPost({})).status, 400);
+  assert.equal((await fetch(base + "/api/jarvis", { method: "POST", body: "{nope" })).status, 400);
+  assert.equal((await fetch(base + "/api/jarvis", { method: "PUT" })).status, 405);
+  // No place set: the weather answer says why instead of inventing one.
+  assert.equal((await jarvisPost({ ask: "weather" })).status, 503);
+  cfg.jarvis = { enabled: false };
+  writeConfig(cfg, 14);
+  assert.equal((await jarvisPost({ text: "hello" })).status, 403);
+});
+
+test("Jarvis speaks through the voice when there is one, and keeps only the last few clips", async () => {
+  const cfgPath = path.join(tmpDir, "jarvis-voice.json");
+  fs.writeFileSync(cfgPath, JSON.stringify({}));
+  const spoken = [];
+  const wav = (line) => Buffer.concat([Buffer.from("RIFF"), Buffer.alloc(40), Buffer.from(line)]);
+  const app2 = createApp({
+    configPath: cfgPath,
+    mediaScanDirs: [],
+    speak: (line, j) => {
+      spoken.push({ line, voice: j.espeakVoice, speed: j.speed });
+      return wav(line);
+    },
+  });
+  await new Promise((r) => app2.listen(0, "127.0.0.1", r));
+  const base2 = "http://127.0.0.1:" + app2.address().port;
+  try {
+    const say = async (text) => (await fetch(base2 + "/api/jarvis", { method: "POST", body: JSON.stringify({ text }) })).json();
+    const first = await say("one");
+    assert.equal(first.voice, true);
+    assert.deepEqual(spoken[0], { line: "one", voice: "en-us+m3", speed: 150 });
+    const clip = await fetch(base2 + "/api/jarvis/" + first.seq + ".wav");
+    assert.equal(clip.status, 200);
+    assert.equal(clip.headers.get("content-type"), "audio/wav");
+    assert.deepEqual(Buffer.from(await clip.arrayBuffer()), wav("one"));
+    for (const t of ["two", "three", "four", "five", "six", "seven"]) await say(t);
+    assert.equal((await fetch(base2 + "/api/jarvis/" + first.seq + ".wav")).status, 404, "the oldest clip is gone");
+    assert.equal((await fetch(base2 + "/api/jarvis/999.wav")).status, 404);
+    // voice: false in the config: on screen only.
+    fs.writeFileSync(cfgPath, JSON.stringify({ jarvis: { voice: false } }));
+    await new Promise((r) => setTimeout(r, 1100));
+    const quiet = await say("quiet");
+    assert.equal(quiet.voice, false);
+  } finally {
+    app2.close();
+  }
+});
+
+test("without espeak-ng Jarvis promises no voice, so the set never asks for a missing clip", async () => {
+  const cfgPath = path.join(tmpDir, "jarvis-novoice.json");
+  fs.writeFileSync(cfgPath, JSON.stringify({}));
+  const app2 = createApp({ configPath: cfgPath, mediaScanDirs: [], espeak: path.join(tmpDir, "no-such-espeak") });
+  await new Promise((r) => app2.listen(0, "127.0.0.1", r));
+  try {
+    const r = await (await fetch("http://127.0.0.1:" + app2.address().port + "/api/jarvis", { method: "POST", body: JSON.stringify({ text: "hello" }) })).json();
+    assert.equal(r.ok, true);
+    assert.equal(r.voice, false);
+  } finally {
+    app2.close();
+  }
+});
+
+test("GET /api/jarvis says what he can do, and the time and a joke come from the station", async () => {
+  const upstreamPort = upstream.address().port;
+  const cfg = configFor(upstreamPort);
+  cfg.jarvis = { name: "max 82", voice: false };
+  cfg.timeFormat = "24h";
+  cfg.dadJokes = ["I only know 25 letters of the alphabet. I don't know Y."];
+  writeConfig(cfg, 15);
+  const about = await (await fetch(base + "/api/jarvis")).json();
+  assert.deepEqual(about, {
+    enabled: true, name: "MAX 82", voice: false, asks: ["weather", "cheerlights", "time", "joke"], maxText: 240, listeners: 0,
+  });
+  const bus = await listenBus();
+  const time = await (await jarvisPost({ ask: "time" })).json();
+  assert.match(time.text, /^It's \d{1,2}:\d\d\.$/, "24-hour, no AM or PM");
+  const joke = await (await jarvisPost({ ask: "joke" })).json();
+  assert.equal(joke.text, "I only know 25 letters of the alphabet. I don't know Y.");
+  await new Promise((res) => setTimeout(res, 150));
+  bus.stop();
+  assert.equal(bus.events.find((e) => e.event === "jarvis").data.name, "MAX 82", "the set gets his name with each line");
+  cfg.dadJokes = [];
+  writeConfig(cfg, 16);
+  assert.equal((await jarvisPost({ ask: "joke" })).status, 503);
+  cfg.jarvis = { enabled: false };
+  writeConfig(cfg, 17);
+  const off = await (await fetch(base + "/api/jarvis")).json();
+  assert.equal(off.enabled, false, "GET still answers while he is switched off");
 });

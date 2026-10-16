@@ -288,6 +288,7 @@
   button.primary:active { background: #4258d0; }
 
   button.ghost { background: transparent; }
+  .jarvis-try { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); }
   button.small { font-size: 13px; padding: 6px 10px; }
   /* A link dressed as a button, for the masthead's jumps to the other pages. */
   a.button {
@@ -458,6 +459,7 @@
       <a href="#channels">Channels</a>
       <a href="#board">Community Board</a>
       <a href="#preview">Channel Preview</a>
+      <a href="#jarvis">Jarvis</a>
       <a href="#display">Display</a>
       <a href="#server">Server</a>
     </nav>
@@ -745,6 +747,77 @@
             <label for="f-previewBg">Background</label>
             <select id="f-previewBg"></select>
           </div>
+        </div>
+      </section>
+    </section>
+
+    <section class="group" id="jarvis" aria-labelledby="g-jarvis">
+      <h2 class="group-head" id="g-jarvis">Jarvis</h2>
+      <p class="group-lede">The station's on-screen host. Anything that can send a web request can put him on the set to say a line or answer a question: the weather, the CheerLights color, the time, a joke. See <a href="https://github.com/nothans/cable-82/blob/main/docs/api.md#jarvis" target="_blank" rel="noopener">the API</a>.</p>
+      <section class="panel" id="p-jarvis-host">
+        <h3>Host</h3>
+        <div class="grid">
+          <div class="field">
+            <label>On the air</label>
+            <div class="toggle"><input type="checkbox" id="f-jarvisEnabled"><label for="f-jarvisEnabled">Let Jarvis pop up over the channel</label></div>
+          </div>
+          <div class="field">
+            <label for="f-jarvisName">Name on his caption</label>
+            <input type="text" id="f-jarvisName" maxlength="16" placeholder="JARVIS">
+          </div>
+        </div>
+      </section>
+      <section class="panel" id="p-jarvis-voice">
+        <h3>Voice</h3>
+        <p class="hint">He speaks through espeak-ng when the machine has it (<code>sudo apt install espeak-ng</code> on a Pi). Without it he still appears and talks with a drawn mouth. <span id="jarvisVoiceStatus" class="note"></span></p>
+        <div class="grid">
+          <div class="field">
+            <label>Speech</label>
+            <div class="toggle"><input type="checkbox" id="f-jarvisVoice"><label for="f-jarvisVoice">Speak his lines out loud</label></div>
+          </div>
+          <div class="field">
+            <label for="f-jarvisEspeakVoice">Voice</label>
+            <select id="f-jarvisEspeakVoice">
+              <option value="en-us+m3">American, male (the default)</option>
+              <option value="en-us+m1">American, male, lower</option>
+              <option value="en-us+m7">American, male, rougher</option>
+              <option value="en-us+f3">American, female</option>
+              <option value="en+m3">British, male</option>
+              <option value="en+f3">British, female</option>
+              <option value="en-us+whisper">Whisper</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="f-jarvisSpeed">Speed</label>
+            <div class="range-row">
+              <input type="range" id="f-jarvisSpeed" min="80" max="260" step="5">
+              <output id="jarvisSpeedOut">150</output>
+            </div>
+            <span class="note">Words a minute.</span>
+          </div>
+          <div class="field">
+            <label for="f-jarvisPitch">Pitch</label>
+            <div class="range-row">
+              <input type="range" id="f-jarvisPitch" min="0" max="99" step="1">
+              <output id="jarvisPitchOut">38</output>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="panel" id="p-jarvis-try">
+        <h3>Try him</h3>
+        <p class="hint">Sends to every set that is listening, with the settings last saved. Save first to hear a change.</p>
+        <div class="field">
+          <label for="f-jarvisSay">A line to say</label>
+          <input type="text" id="f-jarvisSay" maxlength="240" placeholder="Good evening, and welcome to CABLE 82.">
+        </div>
+        <div class="jarvis-try">
+          <button type="button" class="small primary" id="jarvisSayBtn">Say it</button>
+          <button type="button" class="small" data-ask="weather">Weather</button>
+          <button type="button" class="small" data-ask="cheerlights">CheerLights</button>
+          <button type="button" class="small" data-ask="time">Time</button>
+          <button type="button" class="small" data-ask="joke">Joke</button>
+          <span id="jarvisTryOut" class="note" role="status"></span>
         </div>
       </section>
     </section>

@@ -696,3 +696,71 @@ body.faux { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   #stage.flicker #tube-flick { animation: none; }
 }
+
+/* Jarvis, the on-screen host (jarvis.js): he fills the safe area over
+   whatever is on, a hard-pixel picture with his line typed underneath, and
+   arrives and leaves with a roll, the way a feed cut in did. */
+#jarvis {
+  position: absolute;
+  inset: var(--ovy) var(--ovx);
+  z-index: 62;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#jarvis[hidden] { display: none; }
+#jarvis .jv-frame {
+  position: relative;
+  /* Short of the safe area, and the caption well up from the bottom: a
+     real tube hides more of its lower edge than the margins promise. */
+  height: 94%;
+  aspect-ratio: 4 / 3;
+  max-width: 100%;
+  background: #0a0630;
+  box-shadow: 0 0 0 calc(var(--u) * 3) var(--c-white), calc(var(--u) * 6) calc(var(--u) * 6) 0 calc(var(--u) * 3) var(--shadow);
+  overflow: hidden;
+}
+#jarvis canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: pixelated;
+}
+#jarvis .jv-caption {
+  position: absolute;
+  left: calc(var(--u) * 16);
+  right: calc(var(--u) * 16);
+  bottom: calc(var(--u) * 30);
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--u) * 10);
+  font-size: calc(var(--u) * 22 * var(--ts));
+  line-height: 1.15;
+  color: var(--c-white);
+  text-shadow: calc(var(--u) * 2) calc(var(--u) * 2) 0 var(--shadow);
+}
+#jarvis .jv-flag {
+  flex: none;
+  padding: 0 calc(var(--u) * 8);
+  background: var(--c-magenta);
+  color: var(--c-white);
+  text-shadow: none;
+}
+#jarvis .jv-text {
+  padding: 0 calc(var(--u) * 6);
+  background: rgba(10, 6, 48, 0.78);
+  min-height: 1.15em;
+}
+#jarvis.jv-in .jv-frame { animation: jv-in 260ms steps(6) both; }
+#jarvis.jv-out .jv-frame { animation: jv-out 240ms steps(5) both; }
+@keyframes jv-in {
+  0% { transform: scaleY(0.02); filter: brightness(3); }
+  40% { transform: scaleY(1.08) translateX(calc(var(--u) * -12)); }
+  70% { transform: scaleY(0.96) translateX(calc(var(--u) * 8)); }
+  100% { transform: none; filter: none; }
+}
+@keyframes jv-out {
+  0% { transform: none; }
+  60% { transform: scaleY(0.04); filter: brightness(2.5); }
+  100% { transform: scaleY(0) scaleX(0.2); filter: brightness(3); }
+}
