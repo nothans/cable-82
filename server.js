@@ -1434,7 +1434,7 @@ function createApp(opts = {}) {
   return server;
 }
 
-// The command line. Every flag is listed in the README's "Command line"
+// The command line. Every flag is listed in docs/api.md's "Command line"
 // table; a flag that needs a value and does not get one is an error, said in
 // plain words, rather than an undefined that surfaces as a 400 hours later.
 const USAGE =

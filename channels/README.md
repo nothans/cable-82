@@ -23,7 +23,7 @@ channels/
     ...
 ```
 
-Schedules, off-air cards, and the tuner are covered in the main README's [Channels](../README.md#channels) section.
+Schedules, off-air cards, and the tuner are covered in the [channels guide](../docs/channels.md).
 
 ## How it works
 
