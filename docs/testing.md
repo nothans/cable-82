@@ -6,3 +6,4 @@
 - Tuner drill by hand: with more than one channel on the dial, `curl -X POST http://localhost:1982/api/tune -H "content-type: application/json" -d "{\"cmd\":\"up\"}"` and watch the display change channels - the whole bus in one command.
 - Failure drill: `node server.js --chaos` serves mock feeds that randomly hang and fail, so you can watch the Community Board shrug it off.
 - Soak: open `http://localhost:1982/?soak=1` for accelerated channel-82 page flips and refreshes with stats logged to the console.
+- Apple TV: `cd tvos/CableCore && swift test` on a Mac runs the Swift broadcast clock against `dial.js` itself; see [tvos/README.md](../tvos/README.md).

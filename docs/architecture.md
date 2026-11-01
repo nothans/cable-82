@@ -19,3 +19,4 @@ No build step, no dependencies: the files are what the browser runs.
 | `remote-control.html`, `remote-control.js`, `remote-control.css` | The remote |
 | `remote-control.webmanifest`, `remote-sw.js`, `favicon.svg`, `icon-*.png`, `icon-maskable.svg` | What lets a phone install the remote: the manifest, a service worker scoped to the remote alone, and the 82 icon (the PNGs rasterized from the SVG at whole pixels) |
 | `docs/` | [The API](api.md) and [the configuration file](config.md) |
+| `tvos/` | The [Apple TV display](../tvos/README.md): a Swift port of the broadcast clock, tested against `dial.js` itself, and a tvOS app built on it. The station does not need it and nothing else depends on it |

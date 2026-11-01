@@ -1,0 +1,464 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		C82C0DE0000000000000A001 /* CableCore in Frameworks */ = {isa = PBXBuildFile; productRef = C82C0DE0000000000000A003 /* CableCore */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		C82C0DE0000000000000B008 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98C6D87230673BF700166086 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 98C6D87930673BF700166086;
+			remoteInfo = CableTV;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		98C6D87A30673BF700166086 /* CableTV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CableTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C82C0DE0000000000000A004 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Signing.xcconfig; path = Config/Signing.xcconfig; sourceTree = "<group>"; };
+		C82C0DE0000000000000B002 /* CableTVTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CableTVTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		98C6D87C30673BF700166086 /* CableTV */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CableTV;
+			sourceTree = "<group>";
+		};
+		C82C0DE0000000000000B003 /* CableTVTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CableTVTests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		98C6D87730673BF700166086 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				C82C0DE0000000000000A001 /* CableCore in Frameworks */,
+			);
+		};
+		C82C0DE0000000000000B005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		98C6D87130673BF700166086 = {
+			isa = PBXGroup;
+			children = (
+				98C6D87C30673BF700166086 /* CableTV */,
+				C82C0DE0000000000000B003 /* CableTVTests */,
+				C82C0DE0000000000000A004 /* Signing.xcconfig */,
+				98C6D87B30673BF700166086 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		98C6D87B30673BF700166086 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				98C6D87A30673BF700166086 /* CableTV.app */,
+				C82C0DE0000000000000B002 /* CableTVTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		98C6D87930673BF700166086 /* CableTV */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 98C6D88530673BF800166086 /* Build configuration list for PBXNativeTarget "CableTV" */;
+			buildPhases = (
+				98C6D87630673BF700166086 /* Sources */,
+				98C6D87730673BF700166086 /* Frameworks */,
+				98C6D87830673BF700166086 /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				98C6D87C30673BF700166086 /* CableTV */,
+			);
+			name = CableTV;
+			packageProductDependencies = (
+				C82C0DE0000000000000A003 /* CableCore */,
+			);
+			productName = CableTV;
+			productReference = 98C6D87A30673BF700166086 /* CableTV.app */;
+			productType = "com.apple.product-type.application";
+		};
+		C82C0DE0000000000000B001 /* CableTVTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C82C0DE0000000000000B009 /* Build configuration list for PBXNativeTarget "CableTVTests" */;
+			buildPhases = (
+				C82C0DE0000000000000B004 /* Sources */,
+				C82C0DE0000000000000B005 /* Frameworks */,
+				C82C0DE0000000000000B006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C82C0DE0000000000000B007 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				C82C0DE0000000000000B003 /* CableTVTests */,
+			);
+			name = CableTVTests;
+			productName = CableTVTests;
+			productReference = C82C0DE0000000000000B002 /* CableTVTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		98C6D87230673BF700166086 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2700;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					98C6D87930673BF700166086 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					C82C0DE0000000000000B001 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = 98C6D87930673BF700166086;
+					};
+				};
+			};
+			buildConfigurationList = 98C6D87530673BF700166086 /* Build configuration list for PBXProject "CableTV" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 98C6D87130673BF700166086;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				C82C0DE0000000000000A002 /* XCLocalSwiftPackageReference "../CableCore" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 98C6D87B30673BF700166086 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				98C6D87930673BF700166086 /* CableTV */,
+				C82C0DE0000000000000B001 /* CableTVTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		98C6D87830673BF700166086 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+		C82C0DE0000000000000B006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		98C6D87630673BF700166086 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
+		C82C0DE0000000000000B004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		C82C0DE0000000000000B007 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 98C6D87930673BF700166086 /* CableTV */;
+			targetProxy = C82C0DE0000000000000B008 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		98C6D88330673BF800166086 /* Debug configuration for PBXProject "CableTV" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = appletvos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				TVOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		98C6D88430673BF800166086 /* Release configuration for PBXProject "CableTV" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = appletvos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				TVOS_DEPLOYMENT_TARGET = 26.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		98C6D88630673BF800166086 /* Debug configuration for PBXNativeTarget "CableTV" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = C82C0DE0000000000000A004 /* Signing.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "CableTV plays the channels served by your CABLE 82 station on your home network.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIUserInterfaceStyle = Automatic;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 3;
+			};
+			name = Debug;
+		};
+		98C6D88730673BF800166086 /* Release configuration for PBXNativeTarget "CableTV" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = C82C0DE0000000000000A004 /* Signing.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "CableTV plays the channels served by your CABLE 82 station on your home network.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIUserInterfaceStyle = Automatic;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 3;
+			};
+			name = Release;
+		};
+		C82C0DE0000000000000B00A /* Debug configuration for PBXNativeTarget "CableTVTests" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = C82C0DE0000000000000A004 /* Signing.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(CABLETV_BUNDLE_PREFIX).CableTVTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CableTV.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CableTV";
+			};
+			name = Debug;
+		};
+		C82C0DE0000000000000B00B /* Release configuration for PBXNativeTarget "CableTVTests" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = C82C0DE0000000000000A004 /* Signing.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(CABLETV_BUNDLE_PREFIX).CableTVTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CableTV.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CableTV";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		98C6D87530673BF700166086 /* Build configuration list for PBXProject "CableTV" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				98C6D88330673BF800166086 /* Debug configuration for PBXProject "CableTV" */,
+				98C6D88430673BF800166086 /* Release configuration for PBXProject "CableTV" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		98C6D88530673BF800166086 /* Build configuration list for PBXNativeTarget "CableTV" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				98C6D88630673BF800166086 /* Debug configuration for PBXNativeTarget "CableTV" */,
+				98C6D88730673BF800166086 /* Release configuration for PBXNativeTarget "CableTV" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		C82C0DE0000000000000B009 /* Build configuration list for PBXNativeTarget "CableTVTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C82C0DE0000000000000B00A /* Debug configuration for PBXNativeTarget "CableTVTests" */,
+				C82C0DE0000000000000B00B /* Release configuration for PBXNativeTarget "CableTVTests" */,
+			);
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		C82C0DE0000000000000A002 /* XCLocalSwiftPackageReference "../CableCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../CableCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C82C0DE0000000000000A003 /* CableCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CableCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 98C6D87230673BF700166086 /* Project object */;
+	validationLevel = 1;
+}

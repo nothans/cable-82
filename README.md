@@ -67,6 +67,7 @@ The guide lists it with the other channels, now and next, half hour by half hour
 - The control room at `/config`: every setting on one page with one Save, picked up by the set at once.
 - Output made for CRTs (4:3, per-axis overscan, a broadcast-safe palette) and a drawn faux CRT console for flat panels.
 - Any web page as a channel, such as [ws4kp](https://github.com/netbymatt/ws4kp) for weather.
+- An Apple TV as another set, a native tvOS display in [`tvos/`](tvos/README.md) that plays the video channels on the same broadcast clock, with CABLEVUE on 0.
 
 | Jarvis | The control room | The remote |
 | :---: | :---: | :---: |

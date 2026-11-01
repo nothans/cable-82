@@ -1,0 +1,10 @@
+// Signing, per developer. Copy Local.xcconfig.example to Local.xcconfig
+// (git ignores it) and put your team ID and a bundle prefix you own there.
+// Without it the project still builds for the simulator.
+
+DEVELOPMENT_TEAM =
+CABLETV_BUNDLE_PREFIX = org.example
+
+#include? "Local.xcconfig"
+
+PRODUCT_BUNDLE_IDENTIFIER = $(CABLETV_BUNDLE_PREFIX).CableTV
