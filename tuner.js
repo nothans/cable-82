@@ -182,7 +182,10 @@
     // One fetch of /api/channels gives every video channel its files and
     // spots. The player re-reads it on every tune (the folder is the truth
     // and it changes); the guide reads the same copy.
-    let libraries = {}; // channel number -> { files, spots }, each [{file, url, duration}]
+    // channel number -> { files, spots, sources }: files is every program
+    // file, sources the same split by folder [{ folder, files }] so a channel
+    // of several folders can take them in turn. Each file is {file, url, duration}.
+    let libraries = {};
     const library = {
       all: () => libraries,
       cached: (number) => libraries[number] || null,
@@ -192,7 +195,12 @@
         const j = await r.json();
         libraries = {};
         for (const c of j.channels || []) {
-          libraries[c.number] = { files: c.files || [], spots: (c.breaks && c.breaks.files) || [] };
+          const files = c.files || [];
+          // A server from before several folders sends one list: it is the one source.
+          const sources = Array.isArray(c.sources) && c.sources.length
+            ? c.sources.map((src) => ({ folder: src.folder, files: src.files || [] }))
+            : [{ folder: c.folder, files }];
+          libraries[c.number] = { files, spots: (c.breaks && c.breaks.files) || [], sources };
         }
         return libraries;
       },

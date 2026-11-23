@@ -2,19 +2,21 @@
    Two <video> buffers inside the layer: one on the air, one cueing the next
    segment while the current one plays, so a boundary is a cut - the way a
    station does it - not a load. Where the channel is right now comes from
-   the broadcast clock (Cable82Dial.positionAt over the channel's timeline),
-   never from a play cursor; the player only ever chases that position.
+   the broadcast clock (Cable82Dial.channelAir over the channel's
+   timeline: the station's clock, or a scheduled block's own), never from a
+   play cursor; the player only ever chases that position.
    Loads as window.Cable82Video. */
 (() => {
   "use strict";
 
   const Dial = window.Cable82Dial;
-  const { channelTimeline, positionAt, EPOCH } = Dial;
+  const { channelAir, EPOCH } = Dial;
 
   // create({ layer, library, soundLevel, card }) -> { start(channel), stop(), applySound() }
   //   layer      the #video-layer element holding the two buffers
   //   library    the tuner's folder listings: fetch() -> Promise of
-  //              { number: { files, spots } }, cached(number) -> the last one
+  //              { number: { files, spots, sources } }, cached(number) -> the
+  //              last one. sources is [{ folder, files }] per program folder
   //   soundLevel () -> 0..1, the tuner's volume key
   //   card       the off-air card: start(channel, state, mode), stop()
   function create({ layer, library, soundLevel, card }) {
@@ -28,16 +30,23 @@
     let curIndex = -1; // its segment on the air
     let degIndex = -1; // sequential fallback while durations are unknown
 
-    // The channel's air for today: its files (and spots) as a timeline.
-    function timelineFor(ch, lib) {
-      return channelTimeline(ch, lib.files, lib.spots, new Date());
+    // The channel's air now: its files (and spots) as a timeline, and where
+    // the clock is in it. The guide reads the same (Cable82Dial.programAt).
+    function airNow(ch, lib) {
+      return channelAir(ch, lib, new Date(), EPOCH);
+    }
+
+    // Every folder the channel draws on, each with its files: the program
+    // folders in turn, then the spots.
+    function poolsOf(ch, lib) {
+      const pools = lib.sources.slice();
+      if (ch.breaks) pools.push({ folder: ch.breaks.folder, files: lib.spots });
+      return pools;
     }
 
     // Which pool a file on the air came from, for the duration cache.
     function poolOf(ch, lib, url) {
-      if (lib.files.some((f) => f.url === url)) return { folder: ch.folder, files: lib.files };
-      if (ch.breaks && lib.spots.some((f) => f.url === url)) return { folder: ch.breaks.folder, files: lib.spots };
-      return null;
+      return poolsOf(ch, lib).find((p) => p.files.some((f) => f.url === url)) || null;
     }
 
     function postDurations(folder, durations) {
@@ -54,8 +63,7 @@
     // then playback is honest sequential. A programmed channel probes its
     // spots folder too, so the breaks can be cut in.
     async function probeMissing(ch, lib) {
-      const pools = [{ folder: ch.folder, files: lib.files }];
-      if (ch.breaks) pools.push({ folder: ch.breaks.folder, files: lib.spots });
+      const pools = poolsOf(ch, lib);
       let probed = false;
       for (const pool of pools) {
         const missing = pool.files.filter((f) => f.duration == null);
@@ -137,17 +145,23 @@
       }
     }
 
-    // The segment on the air, if the timeline still agrees with it.
+    // The segment on the air, if the timeline still agrees with it. A
+    // shuffled block's segments carry a key that names them across
+    // rebuilds, so the same file a pass later is never mistaken for it.
     function segOnAir(tl) {
+      const was = curIndex >= 0 ? curTl[curIndex] : null;
+      if (was && was.key != null && was.url === currentUrl) {
+        const k = tl.findIndex((s) => s.key === was.key);
+        if (k >= 0 && tl[k].url === was.url) return k;
+      }
       if (curIndex >= 0 && curIndex < tl.length && tl[curIndex].url === currentUrl) return curIndex;
       return tl.findIndex((s) => s.url === currentUrl);
     }
 
     function drive(ch, lib) {
       if (channel !== ch) return;
-      const tl = timelineFor(ch, lib);
+      const { tl, pos } = airNow(ch, lib);
       if (!tl.length) return;
-      const pos = positionAt(tl, Date.now(), EPOCH);
       let target;
       let offset = null;
       if (pos) {
@@ -246,7 +260,7 @@
           // Roll straight into the next segment - the cued standby makes
           // this a cut. Small clock disagreements settle at the next
           // resync (1.5s drift tolerance) and vanish once durations are true.
-          const tl = timelineFor(ch, lib);
+          const { tl } = airNow(ch, lib);
           if (!tl.length) return;
           let i = segOnAir(tl);
           if (i < 0) i = 0;

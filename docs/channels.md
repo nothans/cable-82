@@ -18,6 +18,7 @@ What the guide calls a video channel's programs is the channel's choice, on its 
 
 A video channel can run around the clock or keep **scheduled hours** - dayparts like Saturday and Sunday 8:00 to 11:30.
 A window whose end time is at or before its start runs overnight into the next morning, so "Saturday 20:00 to 01:00" is one window, not two.
+A window is on the air while the set's clock reads inside it, so on the nights the clocks change, a window in the repeated hour airs twice and one in the skipped hour airs only for the part that exists.
 Off the air it shows a test card with the resume time, color bars, or static - or falls back to the board.
 The control room draws the week as a grid so you can see the schedule at a glance.
 
@@ -28,6 +29,44 @@ Each program is cut into even acts of about that length, a break follows every a
 The spots cycle through their folder in order (shuffled daily if the channel is), and the movie picks up where the break cut in.
 The breaks live on the broadcast clock like everything else, so tune in mid-break and you get the spot in progress.
 Set the minutes to 0 for breaks only between programs.
+
+## A Saturday morning block
+
+A video channel can draw on **several folders that take turns**, one program from each, the way a Saturday morning block alternated its cartoons.
+On the channel's row in the control room, **+ Folder** adds another picker; the folders play in the order they are listed.
+Each folder keeps the channel's order on its own (in filename order, or shuffled daily), so the shows alternate whatever is inside them.
+A show with fewer episodes starts over rather than leaving the other to run twice in a row.
+Each show goes through its own episodes on its own: a show starts over when it runs out, never because the other one did, so no episode airs twice in a row.
+
+A scheduled channel usually keeps the station's clock: it runs on unseen between its windows, so at 9:00 you join whatever it has reached, often mid-episode.
+Set its **Clock** to *Each window starts a program* and it keeps a clock of its own instead, one that only runs while it is on the air.
+Every window opens at the top of a program, so a week's block carries on from the last.
+A program the last window cut off airs again from its top, so no episode is lost to the close.
+A window that closed in the break after a program, or exactly at the end of one, opens on the next program; the commercials it cut are not picked up.
+A window too short to finish even the program it opened on moves on to the next one, so the block never repeats one opening week after week.
+Its place is worked out from the start of 2026 with the files the folders hold today, so every set agrees on it, and adding or removing episodes moves where it picks up.
+A shuffled block (*Shuffled daily*) does not reshuffle each day, because a new order every day would lose its place.
+It shuffles each folder each time the show starts over instead: every episode airs once before any airs again, and the next pass comes in a new order that never opens on the episode the last pass closed on.
+The commercials in a shuffled block keep one shuffled order of their own.
+
+Transformers and the Turtles every Saturday from 9 to 11, with 1980s commercials:
+
+```json
+{
+  "number": 17,
+  "name": "SATURDAY MORNING",
+  "type": "video",
+  "folders": ["Transformers", "Ninja Turtles"],
+  "order": "sequence",
+  "mode": "schedule",
+  "clock": "block",
+  "schedule": [{ "days": ["sat"], "start": "09:00", "end": "11:00" }],
+  "offAir": "testcard",
+  "breaks": { "folder": "80s-commercials", "everyMinutes": 8, "spots": 3 }
+}
+```
+
+A 22-minute episode at 8 minutes is cut into three acts, so it airs with three breaks of three spots, the last one leading into the other show.
 
 ## Channels on another drive
 

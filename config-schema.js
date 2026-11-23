@@ -66,6 +66,16 @@
   // A channel folder is one plain path segment under channels/ - no
   // separators, no traversal, no leading dot. The server enforces it again.
   const FOLDER_RE = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}$/;
+  // A video channel can draw on several folders that take turns, the way a
+  // Saturday morning block alternates two cartoons. Eight is a whole block's
+  // worth of shows and keeps the control room's list short.
+  const MAX_FOLDERS = 8;
+  // How a scheduled channel keeps time. "station" is the network's one
+  // clock: the channel runs on unseen between its windows and is joined
+  // wherever it has reached. "block" gives the channel a clock of its own
+  // that only runs while it is on the air: every window opens at the top
+  // of a program and picks up where the last one left off.
+  const CLOCK_MODES = new Set(["station", "block"]);
   // Commercial breaks on a video channel: spots from a second folder, cut
   // into the program every so many minutes. everyMinutes 0 means breaks
   // only between programs; the range tops out at a movie-length act.
@@ -430,11 +440,48 @@
     return segs;
   }
 
+  // A video channel's program folders: `folders` when the config lists
+  // them, else the one `folder`. Each name follows the folder rule; a bad
+  // one is dropped with a word, a repeat is kept once, and past eight the
+  // rest are dropped. A file with both, where `folder` is not the first of
+  // `folders`, plays `folders` and says so, so a hand edit to the wrong one
+  // is never silently ignored. Returns [] when nothing usable is left.
+  function validateFolders(c, errors, chNumber) {
+    const hasList = Array.isArray(c.folders) && c.folders.length > 0;
+    const listed = hasList ? c.folders : [c.folder];
+    const out = [];
+    for (const raw of listed) {
+      const folder = typeof raw === "string" ? raw.trim() : "";
+      if (!FOLDER_RE.test(folder) || folder.includes("..")) {
+        if (listed.length > 1) errors.push("CHANNEL " + chNumber + ": BAD FOLDER " + JSON.stringify(String(raw)).slice(0, 70) + " DROPPED");
+        continue;
+      }
+      if (out.includes(folder)) {
+        errors.push("CHANNEL " + chNumber + ": FOLDER " + folder + " LISTED TWICE, KEPT ONCE");
+        continue;
+      }
+      if (out.length === MAX_FOLDERS) {
+        errors.push("CHANNEL " + chNumber + ": MORE THAN " + MAX_FOLDERS + " FOLDERS, THE REST DROPPED");
+        break;
+      }
+      out.push(folder);
+    }
+    // Compared with the first folder that plays, after the bad ones are gone.
+    const one = typeof c.folder === "string" ? c.folder.trim() : "";
+    if (hasList && one && out.length && one !== out[0]) {
+      errors.push(
+        "CHANNEL " + chNumber + ": FOLDER " + JSON.stringify(one).slice(0, 70) + " IS NOT THE FIRST OF FOLDERS (" +
+          JSON.stringify(out[0]).slice(0, 70) + "), FOLDERS USED"
+      );
+    }
+    return out;
+  }
+
   // Commercial breaks: { folder, everyMinutes, spots } or null for a channel
-  // that plays its folder whole. The spots folder follows the program
-  // folder's rule and must be a different folder - a channel interrupting
-  // itself with itself is a misclick, not a format.
-  function validateBreaks(raw, programFolder, errors, chNumber) {
+  // that plays its folders whole. The spots folder follows the program
+  // folder's rule and must be a different folder from every program folder
+  // - a channel interrupting itself with itself is a misclick, not a format.
+  function validateBreaks(raw, programFolders, errors, chNumber) {
     if (!raw || typeof raw !== "object") return null;
     const folder = typeof raw.folder === "string" ? raw.folder.trim() : "";
     if (!folder) return null; // the picker's "(none)"
@@ -442,8 +489,11 @@
       errors.push("CHANNEL " + chNumber + ": BAD BREAKS FOLDER, BREAKS DROPPED");
       return null;
     }
-    if (folder === programFolder) {
-      errors.push("CHANNEL " + chNumber + ": BREAKS FOLDER IS THE PROGRAM FOLDER, BREAKS DROPPED");
+    const programs = Array.isArray(programFolders) ? programFolders : [programFolders];
+    if (programs.includes(folder)) {
+      errors.push(
+        "CHANNEL " + chNumber + (programs.length > 1 ? ": BREAKS FOLDER IS ONE OF THE PROGRAM FOLDERS" : ": BREAKS FOLDER IS THE PROGRAM FOLDER") + ", BREAKS DROPPED"
+      );
       return null;
     }
     const e = BREAKS.everyMinutes;
@@ -492,15 +542,30 @@
         enabled: c.enabled !== false,
       };
       if (c.type === "video") {
-        const folder = typeof c.folder === "string" ? c.folder.trim() : "";
-        if (!FOLDER_RE.test(folder) || folder.includes("..")) {
+        const folders = validateFolders(c, errors, number);
+        if (!folders.length) {
           errors.push("CHANNEL " + number + ": BAD OR MISSING FOLDER, SKIPPED");
           continue;
         }
-        ch.folder = folder;
-        const breaks = validateBreaks(c.breaks, folder, errors, number);
+        // One folder is written as `folder`, exactly as before several
+        // folders existed, so the one name to edit by hand is the one that
+        // plays. Several are written as `folders`, with `folder` kept as
+        // the first of them for readers that only know the one.
+        ch.folder = folders[0];
+        if (folders.length > 1) ch.folders = folders;
+        const breaks = validateBreaks(c.breaks, folders, errors, number);
         if (breaks) ch.breaks = breaks;
         ch.mode = c.mode === "schedule" ? "schedule" : "continuous";
+        // Written only on a scheduled channel that keeps its own clock, so a
+        // config that never uses it saves exactly as it did before the
+        // setting existed. A block clock on a channel without scheduled hours
+        // is dropped with a word (the control room never saves one).
+        if (c.clock === "block") {
+          if (ch.mode === "schedule") ch.clock = "block";
+          else errors.push("CHANNEL " + number + ": A BLOCK CLOCK NEEDS SCHEDULED HOURS, STATION CLOCK USED");
+        } else if (c.clock != null && c.clock !== "" && !CLOCK_MODES.has(c.clock)) {
+          errors.push("CHANNEL " + number + ": UNKNOWN CLOCK " + JSON.stringify(String(c.clock)).slice(0, 40) + ", STATION CLOCK USED");
+        }
         ch.order = CHANNEL_ORDERS.has(c.order) ? c.order : "sequence";
         ch.offAir = OFFAIR_MODES.has(c.offAir) ? c.offAir : "testcard";
         ch.titles = TITLE_MODES.has(c.titles) ? c.titles : "filename";
@@ -753,6 +818,8 @@
     weatherText,
     parseHM,
     FOLDER_RE,
+    MAX_FOLDERS,
+    CLOCK_MODES: Array.from(CLOCK_MODES),
     BREAKS,
     GUIDE,
     windowSegments,

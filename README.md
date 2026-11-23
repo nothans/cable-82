@@ -60,7 +60,7 @@ The guide lists it with the other channels, now and next, half hour by half hour
 ## Features
 
 - Channel 82, the Community Bulletin Board: your messages, the time, facts, dad jokes, the weather, RSS headlines in a crawl, the CheerLights color, and music behind it.
-- Video channels from a folder of files, on a local disk, a USB drive, or a network share, with scheduled hours and commercial breaks.
+- Video channels from one folder of files, or from several folders that take turns, on a local disk, a USB drive, or a network share, with scheduled hours, commercial breaks, and blocks that open at the top of a program.
 - CABLEVUE, a guide on channel 0 that reads the same clock as the player, so it matches what is on.
 - Jarvis, a 1980s computer-generated host who cuts in over any channel to say a line or answer a question, through `POST /api/jarvis`.
 - Tuning from the keyboard, a USB gamepad or joystick, the phone remote at `/remote-control`, or `POST /api/tune`.

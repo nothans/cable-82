@@ -144,6 +144,13 @@
     return f.folder + "  (" + dur + where + ")";
   }
 
+  // A video channel's program folders, as the editor keeps them: the
+  // config's list, or its one folder, or one empty pick for a new channel.
+  function programFolders(ch) {
+    if (Array.isArray(ch.folders) && ch.folders.length) return ch.folders.slice();
+    return [ch.folder || ""];
+  }
+
   function renderChannels() {
     const host = $("channelList");
     host.innerHTML = "";
@@ -192,16 +199,43 @@
           onchange: (e) => { ch.url = e.target.value; },
         }));
       } else {
-        // video: folder picker (never a typed path), mode, order, off-air look
-        const known = channelFolders.some((f) => f.folder === ch.folder);
-        body.appendChild(el("select", {
-          "aria-label": "Video folder",
-          onchange: (e) => { ch.folder = e.target.value; renderChannels(); },
-        }, [
-          ...(!ch.folder ? [option("", "(pick a folder under channels/)", true)] : []),
-          ...(ch.folder && !known ? [option(ch.folder, ch.folder + "  (folder missing!)", true)] : []),
-          ...channelFolders.map((f) => option(f.folder, folderLabel(f), f.folder === ch.folder)),
-        ]));
+        // video: folder pickers (never a typed path), mode, order, off-air look.
+        // Several folders take turns, one program from each, so a block can
+        // alternate its shows; ch.folder stays the first for older readers.
+        const folders = programFolders(ch);
+        const sync = () => { ch.folders = folders.slice(); ch.folder = folders[0] || ""; };
+        sync();
+        const group = el("span", { class: "ch-folders" });
+        folders.forEach((name, fi) => {
+          const known = channelFolders.some((f) => f.folder === name);
+          // A folder already in the list, or the breaks folder, is not offered twice.
+          const taken = new Set(folders.filter((_, k) => k !== fi));
+          if (ch.breaks) taken.add(ch.breaks.folder);
+          const picker = el("span", { class: "ch-phrase" }, [
+            ...(fi ? [el("span", { class: "note" }, "then")] : []),
+            el("select", {
+              "aria-label": folders.length > 1 ? "Video folder " + (fi + 1) : "Video folder",
+              onchange: (e) => { folders[fi] = e.target.value; sync(); renderChannels(); },
+            }, [
+              ...(!name ? [option("", "(pick a folder under channels/)", true)] : []),
+              ...(name && !known ? [option(name, name + "  (folder missing!)", true)] : []),
+              ...channelFolders.filter((f) => !taken.has(f.folder)).map((f) => option(f.folder, folderLabel(f), f.folder === name)),
+            ]),
+          ]);
+          if (folders.length > 1) {
+            picker.appendChild(el("button", { type: "button", class: "icon danger", title: "Remove this folder", "aria-label": "Remove folder " + (fi + 1),
+              onclick: () => { folders.splice(fi, 1); sync(); renderChannels(); } }, "✕"));
+          }
+          group.appendChild(picker);
+        });
+        const spare = channelFolders.some((f) => !folders.includes(f.folder) && !(ch.breaks && ch.breaks.folder === f.folder));
+        if (folders[0] && folders.length < S.MAX_FOLDERS && spare) {
+          group.appendChild(el("button", {
+            type: "button", class: "small", title: "Another folder that takes turns with these, one program each",
+            onclick: () => { folders.push(""); sync(); renderChannels(); },
+          }, "+ Folder"));
+        }
+        body.appendChild(group);
         body.appendChild(el("select", {
           "aria-label": "Playback order",
           onchange: (e) => { ch.order = e.target.value; },
@@ -211,6 +245,16 @@
           onchange: (e) => { ch.mode = e.target.value; renderChannels(); },
         }, [option("continuous", "Always on the air", ch.mode !== "schedule"), option("schedule", "Scheduled hours", ch.mode === "schedule")]));
         if (ch.mode === "schedule") {
+          // Whose clock a scheduled channel keeps: the station's (joined
+          // wherever it has reached), or its own (every window opens on a
+          // program and picks up where the last one stopped).
+          body.appendChild(el("select", {
+            "aria-label": "Clock",
+            onchange: (e) => { if (e.target.value === "block") ch.clock = "block"; else delete ch.clock; },
+          }, [
+            option("station", "Joined where the station clock is", ch.clock !== "block"),
+            option("block", "Each window starts a program", ch.clock === "block"),
+          ]));
           body.appendChild(el("select", {
             "aria-label": "Off-air look",
             onchange: (e) => { ch.offAir = e.target.value; },
@@ -264,7 +308,7 @@
           }, [
             option("", "(none)", !b),
             ...(b && !breaksKnown ? [option(b.folder, b.folder + "  (folder missing!)", true)] : []),
-            ...channelFolders.filter((f) => f.folder !== ch.folder).map((f) => option(f.folder, folderLabel(f), !!b && f.folder === b.folder)),
+            ...channelFolders.filter((f) => !programFolders(ch).includes(f.folder)).map((f) => option(f.folder, folderLabel(f), !!b && f.folder === b.folder)),
           ]),
         ]);
         if (b) {
@@ -819,7 +863,11 @@
     $("app").setAttribute("aria-busy", "false");
     $("save").disabled = false;
     if (j.warning) setStatus(j.warning, "warn");
-    else setStatus("Loaded. Edit anything, then Save.");
+    else if (j.warnings && j.warnings.length) {
+      // The file loaded, but the schema fixed or ignored part of it: say what.
+      setStatus("Loaded, with these notes on config.json. Edit anything, then Save.", "warn");
+      showWarnings(j.warnings);
+    } else setStatus("Loaded. Edit anything, then Save.");
     startDriftWatch();
   }
 
@@ -903,7 +951,21 @@
         speed: Number($("f-jarvisSpeed").value),
         pitch: Number($("f-jarvisPitch").value),
       },
-      channels: channels.map((c) => JSON.parse(JSON.stringify(c))),
+      channels: channels.map((c) => {
+        const out = JSON.parse(JSON.stringify(c));
+        // A folder slot added but never picked is not a folder: leave it out
+        // rather than save a warning about it.
+        if (Array.isArray(out.folders)) {
+          out.folders = out.folders.filter(Boolean);
+          if (out.folders.length) out.folder = out.folders[0];
+          else delete out.folders;
+        }
+        // The Clock choice belongs to scheduled hours: a channel set back to
+        // always on the air keeps it here, in case it goes back, but does
+        // not save it.
+        if (out.mode !== "schedule") delete out.clock;
+        return out;
+      }),
       preview: {
         name: $("f-previewName").value.trim(),
         tagline: $("f-previewTagline").value.trim(),
@@ -1187,7 +1249,7 @@
       let n = 2;
       while (channels.some((c) => c.number === n)) n++;
       if (!channels.length) channels.push({ number: 82, name: "", type: "bulletin", enabled: true });
-      else channels.push({ number: n, name: "", type: "video", enabled: true, folder: "", mode: "continuous", order: "sequence", offAir: "testcard", titles: "filename" });
+      else channels.push({ number: n, name: "", type: "video", enabled: true, folder: "", folders: [""], mode: "continuous", order: "sequence", offAir: "testcard", titles: "filename" });
       renderChannels();
     });
     $("f-facts").addEventListener("input", updateCounts);

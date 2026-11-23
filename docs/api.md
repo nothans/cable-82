@@ -85,7 +85,7 @@ One answer for two readers.
 
 `folders` is the picker's inventory: every channel folder on every drive, with `files` (count), `seconds` (the running time of the files whose durations are known), `probed` (how many are), and `volume` (the drive it sits on, empty for the built-in folder).
 
-`channels` is the display's: every configured video channel with its `files` in airing order, each with `file`, `url`, and `duration` (null until the display has played it once), plus `title` when the channel is set to show the titles inside its files, and `breaks` (the spots folder and its files) for a channel with commercial breaks.
+`channels` is the display's: every configured video channel with its `files`, each with `file`, `url`, and `duration` (null until the display has played it once), plus `title` when the channel is set to show the titles inside its files, and `breaks` (the spots folder and its files) for a channel with commercial breaks. `sources` lists the same files one program folder at a time, `[{ "folder": "…", "files": […] }]` in the channel's folder order, each folder in filename order; `files` is all of them together, and `folder` is the first folder. A channel of one folder has one source, and its `files` are that folder's, as before.
 
 ### `POST /api/channels/durations`
 

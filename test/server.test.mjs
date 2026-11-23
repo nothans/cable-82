@@ -707,6 +707,35 @@ test("a broken config.json while running is reported as a warning, with the line
   assert.equal(back.warning, undefined, "fixed on disk: the warning goes");
 });
 
+test("a hand edit the schema overrides is named when the room loads, and a save writes one folder as `folder`", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cable82-handedit-"));
+  const cfgPath = path.join(dir, "config.json");
+  // A file saved with `folders: [one]`, then `folder` edited by hand.
+  fs.writeFileSync(cfgPath, JSON.stringify({ channels: [{ number: 2, type: "video", folder: "Edited", folders: ["Saved"] }] }));
+  const app2 = createApp({ configPath: cfgPath, mediaScanDirs: [] });
+  await new Promise((r) => app2.listen(0, "127.0.0.1", r));
+  const base2 = "http://127.0.0.1:" + app2.address().port;
+  try {
+    const j = await (await fetch(base2 + "/api/config")).json();
+    assert.equal(j.config.channels.find((c) => c.number === 2).folder, "Saved");
+    assert.ok(j.warnings && j.warnings.some((w) => w.includes('"Edited"') && w.includes('"Saved"')), JSON.stringify(j.warnings));
+    const save = await fetch(base2 + "/api/config", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-cable82-config": "1", "x-cable82-config-version": j.version },
+      body: JSON.stringify(j.config),
+    });
+    assert.equal(save.status, 200);
+    const onDisk = JSON.parse(fs.readFileSync(cfgPath, "utf8")).channels.find((c) => c.number === 2);
+    assert.equal(onDisk.folder, "Saved");
+    assert.equal("folders" in onDisk, false, "one folder is saved as `folder` alone, so the next hand edit takes");
+    const after = await (await fetch(base2 + "/api/config")).json();
+    assert.equal(after.warnings, undefined, "nothing left to say");
+  } finally {
+    app2.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("a broken config.json at first start answers 500 with the reason, not a bare error", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cable82-broken-"));
   const cfgPath = path.join(dir, "config.json");
@@ -986,6 +1015,33 @@ test("GET /api/channels lists folders and naturally sorts playlists", async () =
   assert.deepEqual(ch.files.map((f) => f.file), ["S01.E1.mp4", "S01.E2.mp4", "S01.E10.mp4"]);
   assert.equal(ch.files[0].duration, 31.2); // cached
   assert.equal(ch.files[1].duration, null); // not probed yet
+});
+
+test("GET /api/channels lists a channel of several folders one folder at a time, across drives", async () => {
+  writeConfig(
+    Object.assign(configFor(upstream.address().port), {
+      channels: [
+        { number: 82, type: "bulletin" },
+        { number: 17, type: "video", folders: ["cartoons", "Beavis and Butthead", "nope"], breaks: { folder: "spots", everyMinutes: 8, spots: 3 } },
+        { number: 90, type: "video", folder: "cartoons" },
+      ],
+    }),
+    2
+  );
+  const j = await (await fetch(base + "/api/channels")).json();
+  const block = j.channels.find((c) => c.number === 17);
+  assert.equal(block.folder, "cartoons", "the first folder, for readers from before");
+  assert.deepEqual(block.sources.map((s) => s.folder), ["cartoons", "Beavis and Butthead", "nope"], "in the channel's order");
+  assert.deepEqual(block.sources[0].files.map((f) => f.file), ["S01.E1.mp4", "S01.E2.mp4", "S01.E10.mp4"]);
+  assert.deepEqual(block.sources[1].files.map((f) => f.file), ["BB01.mp4", "BB02.mp4"], "a folder on a drive");
+  assert.deepEqual(block.sources[2].files, [], "a folder on no drive is empty, not an error");
+  assert.deepEqual(block.files.map((f) => f.file), ["S01.E1.mp4", "S01.E2.mp4", "S01.E10.mp4", "BB01.mp4", "BB02.mp4"], "files is every program file");
+  assert.equal(block.sources[1].files[0].url, "channels/Beavis%20and%20Butthead/BB01.mp4");
+  assert.deepEqual(block.breaks.files.map((f) => f.file), ["ad-1.mp4", "ad-2.mp4"]);
+  // A one-folder channel answers as it always did, with its one source alongside.
+  const one = j.channels.find((c) => c.number === 90);
+  assert.deepEqual(one.sources.map((s) => s.folder), ["cartoons"]);
+  assert.deepEqual(one.files, one.sources[0].files);
 });
 
 test("POST /api/channels/durations records only real files, guarded", async () => {

@@ -227,6 +227,9 @@ function makeConfigLoader(configPath) {
         if (!ok) throw new Error(errors.join("; "));
         cache = { key, cfg };
         loadConfig.error = null;
+        // What the schema fixed or ignored in the file as it stands, so the
+        // control room can name it (a hand edit that did not take).
+        loadConfig.warnings = errors;
       } catch (e) {
         const detail = e instanceof SyntaxError ? describeJsonError(text, e) : e.message;
         loadConfig.error = { message: "config.json could not be read: " + detail, since: new Date().toISOString() };
@@ -237,6 +240,7 @@ function makeConfigLoader(configPath) {
     return cache.cfg;
   }
   loadConfig.error = null;
+  loadConfig.warnings = [];
   return loadConfig;
 }
 
@@ -452,6 +456,7 @@ function createApp(opts = {}) {
       // The file on disk is broken but the last good settings are on the
       // air: the room shows this and a Save writes a good file over it.
       if (problem) out.warning = problem.message + ". The last good settings are on the air; Save from here to write a good file over it.";
+      else if (rawLoadConfig.warnings && rawLoadConfig.warnings.length) out.warnings = rawLoadConfig.warnings;
       return res.end(JSON.stringify(out));
     }
     if (req.method === "POST") {
@@ -822,7 +827,13 @@ function createApp(opts = {}) {
     const channels = [];
     for (const ch of (cfg && cfg.channels) || []) {
       if (ch.type !== "video") continue;
-      const entry = { number: ch.number, folder: ch.folder, files: listChannelFiles(ch.folder, ch.titles === "metadata") || [] };
+      // Each program folder on its own (`sources`, in the channel's order, so
+      // the display can take them in turn), and `files` all of them together
+      // for anything that only needs to know what the channel holds. A
+      // folder missing from every drive is an empty source, not an error.
+      const folders = Array.isArray(ch.folders) && ch.folders.length ? ch.folders : [ch.folder];
+      const sources = folders.map((folder) => ({ folder, files: listChannelFiles(folder, ch.titles === "metadata") || [] }));
+      const entry = { number: ch.number, folder: ch.folder, files: sources.flatMap((src) => src.files), sources };
       // A programmed channel carries its spots too: one fetch gives the
       // display everything the composite timeline is built from.
       if (ch.breaks) entry.breaks = { folder: ch.breaks.folder, files: listChannelFiles(ch.breaks.folder) || [] };

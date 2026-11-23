@@ -6,7 +6,10 @@
 // kind of channel over the bus, watches a real file boundary roll, presses
 // the volume and power keys, works a joystick (a stand-in for one: the
 // browser is told a pad is plugged in), saves from the control room and sees
-// the set reload itself, and asks the remote how many sets are listening.
+// the set reload itself, asks the remote how many sets are listening, and
+// plays a block on its own clock with the browser's clock held just after
+// its window opens (Playwright's clock.setFixedTime; the station needs no
+// test hook for it).
 //
 // It needs two things CABLE 82 itself does not: a browser and an encoder.
 //   - Playwright, for the browser. Not a dependency of the station; give it
@@ -94,6 +97,17 @@ if (ffmpeg) {
     clips++;
   }
   fs.writeFileSync(path.join(clipsDir, ".durations.json"), JSON.stringify(durations));
+  // A second show: one red clip in a folder of its own, for a channel that
+  // takes the two folders in turn.
+  const turnsDir = path.join(channelsDir, "e2e clips b");
+  fs.mkdirSync(turnsDir, { recursive: true });
+  execFileSync(ffmpeg, [
+    "-y", "-loglevel", "error",
+    "-f", "lavfi", "-i", "color=c=0xC83020:s=320x240:r=15:d=4",
+    "-f", "lavfi", "-i", "sine=frequency=660:duration=4",
+    "-c:v", "libvpx", "-b:v", "200k", "-c:a", "libvorbis", "-shortest", path.join(turnsDir, "01 Red.webm"),
+  ], { stdio: "inherit" });
+  fs.writeFileSync(path.join(turnsDir, ".durations.json"), JSON.stringify({ "01 Red.webm": 4 }));
 } else {
   console.log("e2e: no ffmpeg found (set FFMPEG=<path>); the video channel drill will be skipped.");
 }
@@ -111,6 +125,7 @@ fs.writeFileSync(configPath, JSON.stringify({
   channels: [
     { number: 0, type: "guide" },
     ...(clips ? [{ number: 2, type: "video", name: "CLIPS", folder: "e2e clips" }] : []),
+    ...(clips ? [{ number: 3, type: "video", name: "TURNS", folders: ["e2e clips", "e2e clips b"] }] : []),
     { number: 5, type: "video", name: "NEVER", folder: "e2e clips", mode: "schedule", schedule: [], offAir: "testcard" },
     { number: 82, type: "bulletin" },
   ],
@@ -155,7 +170,7 @@ try {
   await tune({ cmd: "set", channel: 0 });
   check("set 0 puts the guide on the air", await until(() => visible("#guide-layer"), 5000));
   const rows = await page.evaluate(() => document.querySelectorAll("#guide-rows .guide-row").length);
-  check("the guide lists every enabled channel", rows === (clips ? 4 : 3), "rows=" + rows);
+  check("the guide lists every enabled channel", rows === (clips ? 5 : 3), "rows=" + rows);
   check("the guide clock is running", /\d:\d\d/.test(await page.textContent("#guide-clock")));
   check("the on-screen display is a centered plate in the upper third, with a dark backing", await page.evaluate(() => {
     const el = document.getElementById("channel-bug");
@@ -195,6 +210,22 @@ try {
       return !!v && v.getAttribute("src") !== was && !v.paused;
     }, firstSrc), 9000, 150);
     check("the next program rolls at the file boundary", rolled, "still on " + firstSrc);
+
+    // A channel of two folders takes them in turn: the program after one
+    // folder's file comes from the other folder.
+    await tune({ cmd: "set", channel: 3 });
+    check("set 3 puts the two-folder channel up", await until(() => visible("#video-layer"), 5000));
+    const folderOf = () => page.evaluate(() => {
+      const v = Array.from(document.querySelectorAll("#video-layer video")).find((x) => !x.hidden && !x.paused);
+      const src = v && v.getAttribute("src");
+      return src ? decodeURIComponent(src.split("/")[1]) : null;
+    });
+    const firstFolder = await until(folderOf, 10000);
+    const nextFolder = await until(async () => {
+      const f = await folderOf();
+      return f && f !== firstFolder ? f : false;
+    }, 9000, 150);
+    check("the two folders take turns across a boundary", !!firstFolder && !!nextFolder && [firstFolder, nextFolder].sort().join("|") === "e2e clips|e2e clips b", firstFolder + " then " + nextFolder);
   }
 
   // Off the air: a scheduled channel with no window.
@@ -379,6 +410,31 @@ try {
   check("the room names the channel", (await room.inputValue("#f-channelName")) === "E2E 83");
   check("the room shows ten presses to shut down", (await room.inputValue("#f-tunerShutdown")) === "10");
   check("the room says whether Jarvis has a voice here", await until(async () => /voice|switched off/i.test(await room.textContent("#jarvisVoiceStatus")), 5000));
+  // The channel editor: a two-folder channel shows a picker per folder, a
+  // folder can be removed and added back, and a scheduled channel offers
+  // its own clock.
+  const turnsRow = (fn, arg) => room.evaluate(([body, a]) => {
+    const item = Array.from(document.querySelectorAll(".ch-item")).find((it) => it.querySelector(".ch-number").value === "3");
+    return item ? new Function("item", "arg", body)(item, a) : null;
+  }, [fn, arg]);
+  if (clips) {
+    const pickers = await turnsRow("return Array.from(item.querySelectorAll('select[aria-label^=\"Video folder\"]')).map((s) => s.value)");
+    check("the room shows a picker for each of a channel's folders", JSON.stringify(pickers) === JSON.stringify(["e2e clips", "e2e clips b"]), JSON.stringify(pickers));
+    await turnsRow("item.querySelector('button[aria-label=\"Remove folder 2\"]').click()");
+    const afterRemove = await turnsRow("return { pickers: item.querySelectorAll('select[aria-label^=\"Video folder\"]').length, add: Array.from(item.querySelectorAll('button')).some((b) => b.textContent === '+ Folder') }");
+    check("a folder can be removed, and then one can be added", afterRemove && afterRemove.pickers === 1 && afterRemove.add, JSON.stringify(afterRemove));
+    await turnsRow("Array.from(item.querySelectorAll('button')).find((b) => b.textContent === '+ Folder').click()");
+    await turnsRow("const s = item.querySelectorAll('select[aria-label^=\"Video folder\"]')[1]; s.value = arg; s.dispatchEvent(new Event('change', { bubbles: true }))", "e2e clips b");
+  }
+  const clockSet = await room.evaluate(() => {
+    const item = Array.from(document.querySelectorAll(".ch-item")).find((it) => it.querySelector(".ch-number").value === "5");
+    const s = item && item.querySelector('select[aria-label="Clock"]');
+    if (!s) return false;
+    s.value = "block";
+    s.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  });
+  check("a scheduled channel offers its own clock", clockSet);
   await room.fill("#f-jarvisName", "e2e host");
   await room.fill("#f-tunerShutdown", "7");
   await room.fill("#f-tagline", "SAVED FROM THE ROOM");
@@ -392,6 +448,12 @@ try {
   check("the faux CRT sliders round-trip through the room", savedCfg.fauxCrt && savedCfg.fauxCrt.curve === 6 && savedCfg.fauxCrt.on === false, JSON.stringify(savedCfg.fauxCrt));
   check("and so do the presses to shut down", savedCfg.tuner.shutdownPresses === 7, JSON.stringify(savedCfg.tuner));
   check("and Jarvis's name, lettered the station's way", savedCfg.jarvis && savedCfg.jarvis.name === "E2E HOST", JSON.stringify(savedCfg.jarvis));
+  if (clips) {
+    const turns = savedCfg.channels.find((c) => c.number === 3);
+    check("the channel's folders round-trip through the room, in order", turns && JSON.stringify(turns.folders) === JSON.stringify(["e2e clips", "e2e clips b"]) && turns.folder === "e2e clips", JSON.stringify(turns));
+  }
+  const never = savedCfg.channels.find((c) => c.number === 5);
+  check("and so does a block's own clock", never && never.clock === "block", JSON.stringify(never));
   // Try him from the room: the set reloads on the save, then the Time key
   // puts him on it under the new name.
   await until(async () => (await (await fetch(base + "/api/tune")).json()).listeners === 1, 8000);
@@ -442,7 +504,7 @@ try {
   check("the glass is cut to the picture's own curve", /^polygon\(/.test(glass.clip), glass.clip);
   check("the picture tells run as one filter on the stage", /url\(/.test(glass.filter), glass.filter);
   const numbersOnRing = await page.evaluate(() => Array.from(document.querySelectorAll("#set .dn")).map((g) => g.dataset.ch));
-  check("the dial carries the lineup's numbers in order", numbersOnRing.join(",") === (clips ? "0,2,5,82" : "0,5,82"), numbersOnRing.join(","));
+  check("the dial carries the lineup's numbers in order", numbersOnRing.join(",") === (clips ? "0,2,3,5,82" : "0,5,82"), numbersOnRing.join(","));
   const pointerBefore = await page.evaluate(() => document.getElementById("set-pointer").style.transform);
   await tune({ cmd: "set", channel: 82 });
   check("the pointer turns on a tune", await until(() => page.evaluate((was) => document.getElementById("set-pointer").style.transform !== was && document.querySelector("#set .dn.on") && document.querySelector("#set .dn.on").dataset.ch === "82", pointerBefore), 5000));
@@ -490,6 +552,88 @@ try {
   await room2.close();
   app2.close();
   fs.rmSync(tmp2, { recursive: true, force: true });
+
+  // A block on its own clock, played in its window. The set runs on a
+  // second station whose browser clock is held at half a second after a
+  // Saturday window opens (Playwright's clock.setFixedTime: Date stands
+  // still, timers and the video keep running). Two clips of 6 and 7
+  // seconds, so a window opening on the minute is not also the top of a
+  // program on the station's clock: the drill picks a Saturday where the
+  // station clock would be well into a program, and the set must show
+  // the top of the one the block opens on, and the guide must name it.
+  if (ffmpeg) {
+    const blockRoot = path.join(tmp, "block-channels");
+    const blockDir = path.join(blockRoot, "e2e block");
+    fs.mkdirSync(blockDir, { recursive: true });
+    const blockDurations = {};
+    for (const [n, color, secs] of [["01 Gold", "0xC8A020", 6], ["02 Teal", "0x20A0A0", 7]]) {
+      execFileSync(ffmpeg, [
+        "-y", "-loglevel", "error",
+        "-f", "lavfi", "-i", "color=c=" + color + ":s=320x240:r=15:d=" + secs,
+        "-f", "lavfi", "-i", "sine=frequency=520:duration=" + secs,
+        "-c:v", "libvpx", "-b:v", "200k", "-c:a", "libvorbis", "-shortest", path.join(blockDir, n + ".webm"),
+      ], { stdio: "inherit" });
+      blockDurations[n + ".webm"] = secs;
+    }
+    fs.writeFileSync(path.join(blockDir, ".durations.json"), JSON.stringify(blockDurations));
+    const blockCfgPath = path.join(tmp, "block-config.json");
+    fs.writeFileSync(blockCfgPath, JSON.stringify({
+      channelName: "E2E BLOCK",
+      feeds: [],
+      music: { enabled: false },
+      cheerlights: { enabled: false },
+      channels: [
+        { number: 0, type: "guide" },
+        { number: 4, type: "video", name: "BLOCK", folder: "e2e block", order: "shuffle-daily", mode: "schedule", clock: "block", schedule: [{ days: ["sat"], start: "09:00", end: "10:00" }] },
+      ],
+      tuner: { cut: "none", power: "black" },
+    }, null, 2));
+    const app3 = createApp({ configPath: blockCfgPath, channelsDir: blockRoot, mediaScanDirs: [], musicDir: path.join(tmp, "no-music") });
+    await new Promise((r) => app3.listen(0, "127.0.0.1", r));
+    const base3 = "http://127.0.0.1:" + app3.address().port;
+    const ctx3 = await browser.newContext({ viewport: { width: 640, height: 480 }, timezoneId: Intl.DateTimeFormat().resolvedOptions().timeZone });
+    try {
+      // What the block clock says, worked out here from the same listing the set reads.
+      const D = require("../dial.js");
+      const blockCh = (await (await fetch(base3 + "/api/config")).json()).config.channels.find((c) => c.number === 4);
+      const entry = (await (await fetch(base3 + "/api/channels")).json()).channels.find((c) => c.number === 4);
+      const lib = { files: entry.files, spots: [], sources: entry.sources };
+      let at = null;
+      for (let week = 0; week < 52 && !at; week++) {
+        const t = new Date(2026, 8, 5 + 7 * week, 9, 0, 0).getTime() + 500;
+        const block = D.channelAir(blockCh, lib, new Date(t), D.EPOCH);
+        const station = D.channelAir(Object.assign({}, blockCh, { clock: "station" }), lib, new Date(t), D.EPOCH);
+        if (block.pos && station.pos && station.pos.offset >= 2.5) at = { t, seg: block.tl[block.pos.index], pos: block.pos };
+      }
+      check("the drill finds a window that opens mid-program on the station's clock", !!at);
+      if (at) {
+        const blockPage = await ctx3.newPage();
+        blockPage.on("pageerror", (e) => pageErrors.push("block set: " + String(e)));
+        await blockPage.clock.setFixedTime(at.t);
+        await blockPage.goto(base3 + "/");
+        await until(async () => (await (await fetch(base3 + "/api/tune")).json()).listeners === 1, 8000);
+        const tune3 = (body) => fetch(base3 + "/api/tune", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+        await tune3({ cmd: "set", channel: 4 });
+        const onAir = () => blockPage.evaluate(() => {
+          const v = Array.from(document.querySelectorAll("#video-layer video")).find((x) => !x.hidden);
+          return v && !v.paused && v.currentTime > 0.05 ? { src: v.getAttribute("src"), t: v.currentTime } : null;
+        });
+        const first = await until(onAir, 10000, 50);
+        check("the block plays in its window", !!first && first.src === at.seg.url, JSON.stringify(first) + " want " + at.seg.url);
+        check("and opens at the top of the program, not where the station clock is", !!first && first.t < 1.5 && at.pos.offset === 0.5, JSON.stringify(first) + " at " + JSON.stringify(at.pos));
+        await tune3({ cmd: "set", channel: 0 });
+        const listed = await until(() => blockPage.evaluate(() => {
+          const row = Array.from(document.querySelectorAll("#guide-rows .guide-row")).find((r) => r.querySelector(".g-num").textContent === "4");
+          const cell = row && row.querySelector(".g-cell .g-title");
+          return cell && cell.textContent ? cell.textContent : null;
+        }), 5000);
+        check("the guide names the program the block opened on", listed === D.programTitle(at.seg.file), listed + " want " + D.programTitle(at.seg.file));
+      }
+    } finally {
+      await ctx3.close();
+      app3.close();
+    }
+  }
 
   check("no page errors on the display", pageErrors.length === 0, pageErrors.slice(0, 3).join(" | "));
 } finally {
